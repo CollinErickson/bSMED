@@ -1,15 +1,50 @@
-if (!exists('lib.loc')) {lib.loc <- NULL}
-#source("adaptconcept_helpers.R")
-#source('LHS.R')
-#source("random_design.R")
-library(TestFunctions, lib.loc = lib.loc)
-library(cf, lib.loc = lib.loc)
-library(SMED, lib.loc = lib.loc)
-library(sFFLHD, lib.loc = lib.loc)
-library(UGP, lib.loc = lib.loc)
-library(magrittr)
-#setOldClass("UGP")
+if (F) {
+  if (!exists('lib.loc')) {lib.loc <- NULL}
+  #source("adaptconcept_helpers.R")
+  #source('LHS.R')
+  #source("random_design.R")
+  library(TestFunctions, lib.loc = lib.loc)
+  library(cf, lib.loc = lib.loc)
+  #library(SMED, lib.loc = lib.loc)
+  #library(sFFLHD, lib.loc = lib.loc)
+  library(UGP, lib.loc = lib.loc)
+  library(magrittr)
+  #setOldClass("UGP")
+}
 
+#' Class providing object with methods for bSMED
+#'
+#' @docType class
+#' @importFrom R6 R6Class
+#' @export
+#' @importFrom stats optim
+#' @keywords data, experiments, adaptive, sequential, simulation, Gaussian process, regression
+#' @return Object of \code{\link{R6Class}} with methods for running a bSMED experiment.
+#' @format \code{\link{R6Class}} object.
+#' @examples
+#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad", n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
+#' a$run()
+#' @field X Design matrix
+#' @field Z Responses
+#' @field b batch size
+#' @field nb Number of batches
+#' @field D Dimension of data
+#' @field Xopts Available points
+#' @field X0 Initial design
+#' @field package Which GP package to use in IGP
+#' @field stats List of tracked stats
+#' @field iteration Which iteration
+#' @field mod The GP model from IGP
+#' @section Methods:
+#' \describe{
+#'   \item{Documentation}{For full documentation of each method go to https://github.com/CollinErickson/bSMED}
+#'   \item{\code{new(X, Z, corr="Gauss", verbose=0, separable=T, useC=F,useGrad=T,
+#'          parallel=T, nug.est=T, ...)}}{This method is used to create object of this class with \code{X} and \code{Z} as the data.}
+#'
+#'   \item{\code{update(Xnew=NULL, Znew=NULL, Xall=NULL, Zall=NULL,
+#' restarts = 5,
+#' param_update = T, nug.update = self$nug.est)}}{This method updates the model, adding new data if given, then running optimization again.}
+#'   }
 bSMED <- R6::R6Class(classname = "bSMED",
   public = list(
    func = NULL, # "function",
@@ -168,7 +203,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      #if (length(force_pvar) == 0) {self$force_pvar <- 0}
      self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
     },
-    run = function(maxit, plotlastonly=F, noplot=F) {
+    run = function(maxit=self$nb - self$iteration + 1, plotlastonly=F, noplot=F) {#browser()
      i <- 1
      while(i <= maxit) {
        #print(paste('Starting iteration', iteration))
@@ -312,7 +347,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       if (any(duplicated(rbind(self$X,Xnew)))) {browser()}
       self$X <- rbind(self$X,Xnew)
       self$Z <- c(self$Z,Znew)
-      self$update_obj_alpha(Xnew=Xnew, Znew=Znew)
+      #self$update_obj_alpha(Xnew=Xnew, Znew=Znew)
     },
     update_obj_alpha = function(Xnew, Znew) {#browser()
       if (is.null(self$obj_alpha)) return()
@@ -495,6 +530,11 @@ bSMED <- R6::R6Class(classname = "bSMED",
       Esum
     },
     exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b) {browser()
+      if (nrow(Xopts) < b) {stop("Not enough points left to select #9813244")}
+      if (nrow(Xopts) == b) {
+        print("Only b options left, taking those #221771")
+        return(1:nrow(Xopts))
+      }
       nXopts <- nrow(Xopts)
       b_inds <- sample(1:nXopts, b, replace=FALSE)
       Xb <- Xopts[b_inds, ]
@@ -504,7 +544,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         Ebn_star <- Ec
         Ebn_star_index <- NA
         for (r in setdiff(1:nXopts, b_inds)) {
-          print("This can be made more efficient, see p16 #9235833")
+          if (runif(1) < .01) print("This can be made more efficient, see p16 #9235833")
           # Calculate Ebn where row r places l
           Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
           # If it's the min, update it
@@ -525,20 +565,30 @@ bSMED <- R6::R6Class(classname = "bSMED",
     },
     update_parameters = function() {
       if (self$iteration == 1) {return()}
-      browser()
+      #browser()
       # update params
       self$kappa <- (self$iteration - 1) / self$nb # p15 right column
+      if (self$kappa > 1) {self$kappa <- 1} # Shouldn't be bigger than 1
       # TODO: update self$alpha with model
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
 
       # update regions
+      if (TRUE & nrow(self$Xopts_removed)>0) { # This add the points back in for consideration
+        # don't think it's in paper, but it makes sense since the model changes
+        self$Xopts <- rbind(self$Xopts, self$Xopts_removed)
+        self$Xopts_removed <- matrix(NA, 0, self$D)
+      }
       mod.sample <- self$p(matrix(runif(1e4*self$D), ncol=self$D))
       xi05 <- unname(quantile(mod.sample, 0.05))
       xi95 <- unname(quantile(mod.sample, 0.95))
       self$tau <- (1-self$kappa) * xi05 + self$kappa * xi95 # p15
       pXopts <- self$p(self$Xopts)
-      Xopts_inds_to_remove <- pXopts < self$tau
+      Xopts_inds_to_remove <- (pXopts < self$tau)
+      if (sum(!Xopts_inds_to_remove) < self$b) {#browser()
+        print("Tau takes too many, leaving best b")
+        Xopts_inds_to_remove <- (pXopts < sort(pXopts, decreasing = TRUE)[self$b])
+      }
       print(paste("Removed", sum(Xopts_inds_to_remove), "points"))
       self$Xopts_removed <- rbind(self$Xopts_removed, self$Xopts[Xopts_inds_to_remove, ])
       self$Xopts <- self$Xopts[!Xopts_inds_to_remove, ]
