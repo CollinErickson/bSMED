@@ -52,7 +52,8 @@ param_update = T, nug.update = self$nug.est)}}{This method updates the model, ad
   }
 }
 \examples{
-a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad", n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
+a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad",
+     n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
 a$run()
 }
 \keyword{Gaussian}

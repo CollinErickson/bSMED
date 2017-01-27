@@ -3,3 +3,5 @@
 export(bSMED)
 importFrom(R6,R6Class)
 importFrom(stats,optim)
+importFrom(stats,runif)
+importFrom(stats,setNames)

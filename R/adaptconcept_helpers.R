@@ -15,6 +15,8 @@ maxgridfunc <- function(func1,lims,batch=F) {
   if(batch) {return(max(func1(X1)))}
   max(apply(X1,1,func1))
 }
+
+#' @importFrom stats runif
 msecalc <- function(truefunc, guessfunc,lims, n=500) {
   #X1 <- simple.grid(20,nrow(lims),scaledto=lims)
   #X1 <- lhs::maximinLHS(n, nrow(lims))
@@ -44,6 +46,7 @@ maxN <- function(x, N=2,all.indices=F){
 }
 
 
+#' @importFrom stats runif
 simple.random <- function(n,d,scaledto=NULL) {
   m <- matrix(runif(n*d), ncol=d, nrow=n)
   if(!is.null(scaledto)) {#browser()
@@ -51,6 +54,9 @@ simple.random <- function(n,d,scaledto=NULL) {
   }
   m
 }
+
+
+#' @importFrom stats runif
 simple.LHS <- function(n,d,scaled=TRUE,centered=FALSE) {
   m <- matrix(rep(1:n,d),n,d)
   m <- apply(m,2,function(xx){sample(xx)})
@@ -70,6 +76,8 @@ is.LHS <- function(m,scaled=TRUE) {
 is.OA <- function(m,strength=2) {
 
 }
+
+#' @importFrom stats setNames
 simple.grid <- function(n,d,scaled=TRUE,random=TRUE,centered=FALSE,scaledto=NULL) {
   m <- matrix(1:n,ncol=1)
   if (d>1) {

@@ -22,7 +22,8 @@ if (F) {
 #' @return Object of \code{\link{R6Class}} with methods for running a bSMED experiment.
 #' @format \code{\link{R6Class}} object.
 #' @examples
-#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad", n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
+#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad",
+#'      n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
 #' a$run()
 #' @field X Design matrix
 #' @field Z Responses
@@ -110,7 +111,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
 
      self$design <- design
      if (self$design == "sFFLHD") {
-       self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
+       #self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
      } else if (self$design == "random") {
        self$s <- random_design$new(D=D, L=L)
      } else {
@@ -123,7 +124,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      if(is.null(package)) {self$package <- "laGP"}
      else {self$package <- package}
      #self$mod <- UGP$new(package = self$package)
-     self$mod <- IGP(package = self$package)
+     self$mod <- UGP::IGP(package = self$package)
      self$stats <- list(iteration=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
      self$iteration <- 1
      self$obj_alpha <- 0.5
@@ -391,14 +392,14 @@ bSMED <- R6::R6Class(classname = "bSMED",
        screen(1)
        #xlim <- lims[1,]
        #ylim <- lims[2,]
-       cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+       cf::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
               afterplotfunc=function(){points(self$X,pch=19)
                                        points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
               }
        )
        # Plot s2 predictions
        screen(2)
-       cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+       cf::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
                afterplotfunc=function(){points(self$X,pch=19)
                  points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
                  points(self$Xopts, col=2); # add points not selected
@@ -406,7 +407,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
        )
        screen(3) # actual squared error plot
        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-       cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
+       cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
        if (self$iteration >= 2) {
          statsdf <- as.data.frame(self$stats)
          screen(4) # MSE plot
@@ -424,7 +425,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
          #plot(statsdf$iter, statsdf$minbatch, type='o', pch=19,
          #     xlab="Iteration")#, ylab="Level")
          #legend('bottomright',legend="Batch not run",fill=1)
-         cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F, pretitle="Grad ")
+         cf::cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F, pretitle="Grad ")
 
          screen(6) # % of pts used plot
          par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
@@ -434,7 +435,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
        }
        screen(7) # actual squared error plot
        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-       cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
+       cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
                           n = 20, mainminmax_minmax = F, pretitle="SqErr ")
 
        close.screen(all = TRUE)
@@ -682,7 +683,7 @@ if (F) {
   }
   a <- adapt.concept2.sFFLHD.R6$new(D=2,L=5,func=banana, obj="desirability", desirability_func=des_funcse, n0=12, take_until_maxpvar_below=.9, package="laGP", design='sFFLHD')
   a$run(5)
-  cf(function(x) des_funcse(a$mod, x), batchmax=1e3, pts=a$X)
+  cf::cf(function(x) des_funcse(a$mod, x), batchmax=1e3, pts=a$X)
 }
 if (F) {
   a <- bSMED$new(D=2,L=1003,func=gaussian1, obj="grad", n0=0,
