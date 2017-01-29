@@ -53,22 +53,22 @@ bSMED <- R6::R6Class(classname = "bSMED",
    L = NULL, # "numeric",
    g = NULL, # "numeric", # g not used but I'll leave it for now
    X = NULL, # "matrix", Z = "numeric", Xnotrun = "matrix",
-   Xnotrun = NULL,
+   #Xnotrun = NULL,
    Z = NULL,
    s = NULL, # "sFFLHD" an object with $get.batch to get batch of points
-   design = NULL,
+   #design = NULL,
    stats = NULL, # "list",
    iteration = NULL, # "numeric",
    obj = NULL, # "character",
    obj_func = NULL, # "function",
    obj_alpha = NULL,
    n0 = NULL, # "numeric"
-   take_until_maxpvar_below = NULL,
+   #take_until_maxpvar_below = NULL,
    package = NULL, # "character",
    batch.tracker = NULL, # "numeric",
-   force_old = NULL, # "numeric",
-   force_pvar = NULL, # "numeric",
-   useSMEDtheta = NULL, # "logical"
+   #force_old = NULL, # "numeric",
+   #force_pvar = NULL, # "numeric",
+   #useSMEDtheta = NULL, # "logical"
    mod = NULL,
    desirability_func = NULL, # args are mod and XX
 
@@ -92,33 +92,36 @@ bSMED <- R6::R6Class(classname = "bSMED",
    nb=NULL,
 
    initialize = function(D,L,package=NULL, obj=NULL, n0=0,
-                         force_old=0, force_pvar=0,
-                         useSMEDtheta=F, func, take_until_maxpvar_below=NULL, design="sFFLHD",
+                         #force_old=0, force_pvar=0,
+                         #useSMEDtheta=F,
+                         func,
+                         #take_until_maxpvar_below=NULL,
+                         #design="sFFLHD",
                          p=NULL, alpha=1, gamma=0, tau=0, kappa=0,
                          X0, Xopts, b, nb,
                          ...) {#browser()
      self$D <- D
      self$L <- L
      self$func <- func
-     self$force_old <- force_old
-     self$force_pvar <- force_pvar
-     self$take_until_maxpvar_below <- take_until_maxpvar_below
+     #self$force_old <- force_old
+     #self$force_pvar <- force_pvar
+     #self$take_until_maxpvar_below <- take_until_maxpvar_below
 
      #if (any(length(D)==0, length(L)==0, length(g)==0)) {
      if (any(length(D)==0, length(L)==0)) {
        message("D and L must be specified")
      }
 
-     self$design <- design
-     if (self$design == "sFFLHD") {
-       #self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
-     } else if (self$design == "random") {
-       self$s <- random_design$new(D=D, L=L)
-     } else {
-       stop("No design 3285729")
-     }
+     # self$design <- design
+     # if (self$design == "sFFLHD") {
+     #   #self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
+     # } else if (self$design == "random") {
+     #   self$s <- random_design$new(D=D, L=L)
+     # } else {
+     #   stop("No design 3285729")
+     # }
      self$X <- matrix(NA,0,D)
-     self$Xnotrun <- matrix(NA,0,D)
+     #self$Xnotrun <- matrix(NA,0,D)
      #if(length(lims)==0) {lims <<- matrix(c(0,1),D,2,byrow=T)}
      #mod$initialize(package = "mlegp")
      if(is.null(package)) {self$package <- "laGP"}
@@ -193,16 +196,16 @@ bSMED <- R6::R6Class(classname = "bSMED",
        self$X <- rbind(self$X, Xnew[1:self$n0, , drop=F])
        self$Z <- c(self$Z, apply(self$X,1,self$func))
        self$batch.tracker <- self$batch.tracker[-(1:self$n0)]
-       if (nrow(Xnew) > self$n0) {
-         self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
-       }
+       #if (nrow(Xnew) > self$n0) {
+       #  self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
+       #}
        self$mod$update(Xall=self$X, Zall=self$Z)
      }
 
      #if (length(never_dive)==0) {never_dive <<- FALSE}
      #if (length(force_old) == 0) {self$force_old <- 0}
      #if (length(force_pvar) == 0) {self$force_pvar <- 0}
-     self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
+     #self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
     },
     run = function(maxit=self$nb - self$iteration + 1, plotlastonly=F, noplot=F) {#browser()
      i <- 1
@@ -214,6 +217,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      }
     },
     run1 = function(plotit=TRUE) {#browser()#if(iteration>24)browser()
+      if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389")}
       self$update_parameters()
       self$add_data()
       self$update_mod()
@@ -377,7 +381,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      #stats$level <<- c(stats$level, level)
      self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
      self$stats$mse <- c(self$stats$mse, msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
-     self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xnotrun)))
+     self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
      self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
      self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
     },
@@ -530,7 +534,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       }
       Esum
     },
-    exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b) {browser()
+    exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b) {#browser()
       if (nrow(Xopts) < b) {stop("Not enough points left to select #9813244")}
       if (nrow(Xopts) == b) {
         print("Only b options left, taking those #221771")
@@ -686,8 +690,8 @@ if (F) {
   cf::cf(function(x) des_funcse(a$mod, x), batchmax=1e3, pts=a$X)
 }
 if (F) {
-  a <- bSMED$new(D=2,L=1003,func=gaussian1, obj="grad", n0=0,
-                 b=3, X0=lhs::maximinLHS(2, 20), Xopts=lhs::maximinLHS(2,50))
+  a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad", n0=0,
+                 b=3, nb=4, X0=lhs::maximinLHS(20, 2), Xopts=lhs::maximinLHS(10, 2))
   a$run(2)
 
 }
