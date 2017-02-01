@@ -75,6 +75,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
    # adding for bSMED
    phat = NULL,
    alpha = NULL,
+   use_alpha = NULL,
    gamma = NULL,
    gammamax = NULL,
    tau = NULL,
@@ -97,7 +98,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          func,
                          #take_until_maxpvar_below=NULL,
                          #design="sFFLHD",
-                         p=NULL, alpha=1, gamma=0, tau=0, kappa=0,
+                         p=NULL, alpha=1, use_alpha=F, gamma=0, tau=0, kappa=0,
                          X0, Xopts, b, nb,
                          ...) {#browser()
      self$D <- D
@@ -149,6 +150,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      }
      self$p = p_scaled_func
      self$alpha = alpha
+     self$use_alpha <- use_alpha
      self$gamma = gamma
      self$gammamax = NA
      self$tau = tau
@@ -186,21 +188,27 @@ bSMED <- R6::R6Class(classname = "bSMED",
        self$desirability_func <- list(...)$desirability_func
      }
 
-     self$n0 <- n0
-     if (length(self$n0) != 0 && self$n0 > 0) {
-       Xnew <- matrix(NA, 0, self$D)
-       while (nrow(Xnew) < self$n0) {
-         Xnew <- rbind(Xnew, self$s$get.batch())
-         self$batch.tracker <- rep(self$s$b,self$L)
-       }
-       self$X <- rbind(self$X, Xnew[1:self$n0, , drop=F])
-       self$Z <- c(self$Z, apply(self$X,1,self$func))
-       self$batch.tracker <- self$batch.tracker[-(1:self$n0)]
-       #if (nrow(Xnew) > self$n0) {
-       #  self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
-       #}
-       self$mod$update(Xall=self$X, Zall=self$Z)
-     }
+     self$n0 <- nrow(X0) #n0
+     # Initial with X0 points
+     # self$X <- X0 #rbind(self$X, Xnew[1:self$n0, , drop=F])
+     # self$Z <- apply(self$X,1,self$func)
+     # self$mod$update(Xall=self$X, Zall=self$Z)
+
+     # No longer doing this to initalize data since the points come from a design
+     # if (length(self$n0) != 0 && self$n0 > 0) {
+     #   Xnew <- matrix(NA, 0, self$D)
+     #   while (nrow(Xnew) < self$n0) {
+     #     Xnew <- rbind(Xnew, self$s$get.batch())
+     #     self$batch.tracker <- rep(self$s$b,self$L)
+     #   }
+     #   self$X <- rbind(self$X, Xnew[1:self$n0, , drop=F])
+     #   self$Z <- c(self$Z, apply(self$X,1,self$func))
+     #   self$batch.tracker <- self$batch.tracker[-(1:self$n0)]
+     #   #if (nrow(Xnew) > self$n0) {
+     #   #  self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
+     #   #}
+     #   self$mod$update(Xall=self$X, Zall=self$Z)
+     # }
 
      #if (length(never_dive)==0) {never_dive <<- FALSE}
      #if (length(force_old) == 0) {self$force_old <- 0}
@@ -233,6 +241,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     add_data = function() {#browser()
       # If first time
       if (nrow(self$X) == 0 ) {
+        #stop("Shouldn't be here #9238527")
         # self$X <- rbind(self$X, self$s$get.batch())
         self$X <- self$X0
         self$Z <- c(self$Z,apply(self$X, 1, self$func))
@@ -571,10 +580,18 @@ bSMED <- R6::R6Class(classname = "bSMED",
     update_parameters = function() {
       if (self$iteration == 1) {return()}
       #browser()
+
+      # First get p since it is needed to calculate alpha (might not actually use)
+      pAll <- self$p(rbind(self$X, self$Xopts))
+      self$pX <- pAll[1:nrow(self$X)]
+      self$pXopts <- pAll[-(1:nrow(self$X))]
+
       # update params
       self$kappa <- (self$iteration - 1) / self$nb # p15 right column
       if (self$kappa > 1) {self$kappa <- 1} # Shouldn't be bigger than 1
       # TODO: update self$alpha with model
+      self$alpha <- if (self$iteration <=2 || !self$use_alpha) {1}
+                    else {self$update_alpha_regression()}
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
 
@@ -612,6 +629,45 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$pXopts <- pAll[1:nrow(self$X), ]
       self$qX <- self$q_from_p(self$pX)
       self$qXopts <- self$q_from_p(self$pXopts)
+    },
+    update_alpha_regression = function() {browser()
+      # alpha is used to scale phat so max of alpha*p is at one
+      # But if I'm using a scaled relative value, then it doesn't matter
+      # So using this with relative values gives issues in log(1-alpha*maxp)
+      nb <- self$iteration - 2 # First was initial points, haven't done current yet
+      i_values0 <- 1:nb
+      pi_values0 <- sapply(1:nb, function(ii) {max(self$pX[1:(self$n0 + ii * self$b)])})
+      pnb <- pi_values0[nb]
+      #pnb <- max(self$pX)
+
+      pnb_bar <- (nb*pnb + 1) / (nb + 1)
+      i_values <- c(i_values0, 0, self$nb)
+      pi_values <- c(pi_values0, pi_values0[1]/2, pnb_bar)
+
+      pgnb_lb <- (pnb + pnb_bar) / 2
+
+      pgnb <- pgnb_lb
+      beta0 <- 0
+      beta1 <- 0
+
+      pi_hat <- function(i, pgnbhat, beta0hat, beta1hat) {
+        pgnbhat * 1/(1 + exp(-(beta0hat + beta1hat*i)))
+      }
+      optim_fn <- function(par_in) {
+        pgnbhat <- par_in[1]
+        beta0hat <- par_in[2]
+        beta1hat <- par_in[3]
+        mean((pi_values - pi_hat(i_values, pgnbhat, beta0hat, beta1hat))^2)
+      }
+
+      optim_out <- optim(par=c(pgnb_lb, 0, 0), fn=optim_fn)
+      pgnb <- optim_out$par[1]
+      if (pgnb < pgnb_lb) {
+        print("pgnb is lower than lb")
+      }
+      alpha <- 1/pgnb
+      print(paste("new alpha is", alpha))
+      alpha
     }
   )
 )
