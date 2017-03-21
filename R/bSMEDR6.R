@@ -22,7 +22,7 @@ if (F) {
 #' @return Object of \code{\link{R6Class}} with methods for running a bSMED experiment.
 #' @format \code{\link{R6Class}} object.
 #' @examples
-#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad",
+#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="func",
 #'      n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
 #' a$run()
 #' @field X Design matrix
@@ -129,7 +129,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      else {self$package <- package}
      #self$mod <- UGP$new(package = self$package)
      self$mod <- UGP::IGP(package = self$package)
-     self$stats <- list(iteration=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
+     self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
      self$iteration <- 1
      self$obj_alpha <- 0.5
 
@@ -225,7 +225,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
      }
     },
     run1 = function(plotit=TRUE) {#browser()#if(iteration>24)browser()
-      if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389")}
+      if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389, initial design not big enough, b reached")}
       self$update_parameters()
       self$add_data()
       self$update_mod()
@@ -387,6 +387,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     update_stats = function() {
      # self$stats$ <- c(self$stats$, )
      self$stats$iteration <- c(self$stats$iteration, self$iteration)
+     self$stats$n <- c(self$stats$n, nrow(self$X))
      #stats$level <<- c(stats$level, level)
      self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
      self$stats$mse <- c(self$stats$mse, msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
