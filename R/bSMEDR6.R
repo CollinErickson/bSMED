@@ -48,7 +48,8 @@ if (F) {
 #'   }
 bSMED <- R6::R6Class(classname = "bSMED",
   public = list(
-   func = NULL, # "function",
+   func = NULL, # "function", The function to calculate new values after selected
+   func_run_together = NULL, # Should the matrix of values to be run be passed to func as a matrix or by row?, useful if you parallelize your own function or call another program to get actual values
    D = NULL, # "numeric",
    L = NULL, # "numeric",
    g = NULL, # "numeric", # g not used but I'll leave it for now
@@ -95,19 +96,25 @@ bSMED <- R6::R6Class(classname = "bSMED",
    p = NULL,
    nb=NULL,
 
+   parallel = NULL, # Should the new values be calculated in parallel? Not for the model, for getting actual new Z values
+   parallel_cores = NULL, # Number of cores used for parallel
+   parallel_cluster = NULL, # The object for the cluster currently running
+
    initialize = function(D,L,package=NULL, obj=NULL, n0=0,
                          #force_old=0, force_pvar=0,
                          #useSMEDtheta=F,
-                         func,
+                         func, func_run_together=FALSE,
                          #take_until_maxpvar_below=NULL,
                          #design="sFFLHD",
-                         p=NULL, alpha=1, use_alpha=F, scale_obj=NULL, gamma=0, tau=0, kappa=0,
+                         p=NULL, alpha=1, use_alpha=T, scale_obj=NULL, gamma=0, tau=0, kappa=0,
                          X0, Xopts, b, nb,
                          estimate.nugget=FALSE, set.nugget=1e-12,
+                         parallel=FALSE, parallel_cores="detect",
                          ...) {#browser()
      self$D <- D
      self$L <- L
      self$func <- func
+     self$func_run_together <- func_run_together
      #self$force_old <- force_old
      #self$force_pvar <- force_pvar
      #self$take_until_maxpvar_below <- take_until_maxpvar_below
@@ -249,6 +256,25 @@ bSMED <- R6::R6Class(classname = "bSMED",
      #if (length(force_old) == 0) {self$force_old <- 0}
      #if (length(force_pvar) == 0) {self$force_pvar <- 0}
      #self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
+
+     # Set up parallel stuff
+     self$parallel <- parallel
+     if (self$parallel) {
+       # Use a list to store info about parallel, such as num nodes, cluster, etc
+       if (parallel_cores == "detect") {
+         self$parallel_cores <- parallel::detectCores()
+       } else {
+         self$parallel_cores <- parallel_cores
+       }
+
+       # For now assume using parallel package
+
+       self$parallel_cluster <- parallel::makeCluster(spec = self$parallel_cores, type = "SOCK")
+
+
+
+
+     }
     },
     run = function(maxit=self$nb - self$iteration + 1, plotlastonly=F, noplot=F) {#browser()
      i <- 1
@@ -273,13 +299,25 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #set_params()
       self$iteration <- self$iteration + 1
     },
+    calculate_Z = function(X) {browser()
+      # Used to just be apply(self$X, 1, self$func)
+      if (self$parallel && inherits(self$parallel_cluster, "cluster")) {
+        # parallel::clusterApply(cl = self$parallal_cluster, x = 1:nrow(X))
+        parallel::parRapply(cl = self$parallel_cluster, x = X, self$func)
+      } else if (self$func_run_together) {
+        self$func(X)
+      } else {
+        apply(X, 1, self$func)
+      }
+    },
     add_data = function() {#browser()
       # If first time
       if (nrow(self$X) == 0 ) {
         #stop("Shouldn't be here #9238527")
         # self$X <- rbind(self$X, self$s$get.batch())
         self$X <- self$X0
-        self$Z <- c(self$Z,apply(self$X, 1, self$func))
+        #self$Z <- c(self$Z,apply(self$X, 1, self$func))
+        self$Z <- c(self$Z,self$calculate_Z(X=self$X))
         return()
       }
       #browser()
@@ -392,7 +430,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
       Xnew <- self$Xopts[newL,]
       self$Xopts <- self$Xopts[-newL, , drop=FALSE]
       self$batch.tracker <- self$batch.tracker[-newL]
-      Znew <- apply(Xnew,1,self$func)
+      # Znew <- apply(Xnew,1,self$func)
+      Znew <- self$calculate_Z(Xnew)
       if (any(duplicated(rbind(self$X,Xnew)))) {browser()}
       self$X <- rbind(self$X,Xnew)
       self$Z <- c(self$Z,Znew)
@@ -533,15 +572,16 @@ bSMED <- R6::R6Class(classname = "bSMED",
        }
      }
     },
-    delete = function() {
-      self$mod$delete()
-    },
-    q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {browser("I never use this")
+    q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {
+      browser("I never use this, maybe should remove")
       (1 - alpha * p(X)) ^ gamma
     },
     q_from_p = function(p, alpha=self$alpha, gamma=self$gamma) {
       omap <- 1 - alpha * p
 
+      # This section shouldn't be used since it is taken care of
+      #  when using alpha regression or scale_obj, only might be
+      #  used if using obj as given, which is probably a bad idea.
       # p values should be between 0 and 1, so fix it here
       num_less_0 <- sum(omap < 0)
       num_great_1 <- sum(omap > 1)
@@ -611,10 +651,10 @@ bSMED <- R6::R6Class(classname = "bSMED",
         for (r in setdiff(1:nXopts, b_inds)) {
           if (runif(1) < .01) print("This can be made more efficient, see p16 #9235833")
           # Calculate Ebn where row r places l
-          if (any(is.nan(self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])))) {browser()}
+          # if (any(is.nan(self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])))) {browser()}
           Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
           # If it's the min, update it
-          if (inherits(try(if(Ebnr < Ebn_star){}), "try-error")) {browser()}
+          # if (inherits(try(if(Ebnr < Ebn_star){}), "try-error")) {browser()}
           if (Ebnr < Ebn_star) {
             Ebn_star <- Ebnr
             Ebn_star_index <- r
@@ -759,7 +799,14 @@ bSMED <- R6::R6Class(classname = "bSMED",
       alpha <- 1/pgnb
       print(paste("new alpha is", alpha))
       alpha
-    }
+    },
+   delete = function() {browser()
+     self$mod$delete()
+     if (self$parallel) {
+       print("Deleting cluster")
+       parallel::stopCluster(cl = self$parallel_cluster)
+     }
+   }
   )
 )
 
