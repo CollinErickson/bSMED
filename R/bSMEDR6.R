@@ -27,7 +27,7 @@ if (F) {
 #' a$run()
 #' @field X Design matrix
 #' @field Z Responses
-#' @field b batch size
+#' @field b batch size to select each iteration
 #' @field nb Number of batches
 #' @field D Dimension of data
 #' @field Xopts Available points
@@ -62,6 +62,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
    obj = NULL, # "character",
    obj_func = NULL, # "function",
    obj_alpha = NULL,
+   scale_obj = NULL,
    n0 = NULL, # "numeric"
    #take_until_maxpvar_below = NULL,
    package = NULL, # "character",
@@ -76,6 +77,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
    phat = NULL,
    alpha = NULL,
    use_alpha = NULL,
+   alpha_regression_i_values = NULL,
+   alpha_regression_p_values = NULL,
    gamma = NULL,
    gammamax = NULL,
    tau = NULL,
@@ -98,8 +101,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          func,
                          #take_until_maxpvar_below=NULL,
                          #design="sFFLHD",
-                         p=NULL, alpha=1, use_alpha=F, gamma=0, tau=0, kappa=0,
+                         p=NULL, alpha=1, use_alpha=F, scale_obj=NULL, gamma=0, tau=0, kappa=0,
                          X0, Xopts, b, nb,
+                         estimate.nugget=FALSE, set.nugget=1e-12,
                          ...) {#browser()
      self$D <- D
      self$L <- L
@@ -128,7 +132,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
      if(is.null(package)) {self$package <- "laGP"}
      else {self$package <- package}
      #self$mod <- UGP$new(package = self$package)
-     self$mod <- UGP::IGP(package = self$package)
+     # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
+     self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
      self$iteration <- 1
      self$obj_alpha <- 0.5
@@ -139,22 +144,52 @@ bSMED <- R6::R6Class(classname = "bSMED",
      self$b <- b
      # self$qX = NULL,
      # self$qXopts = NULL,
-     p_scaled_func = function(XX) {#browser()
-       pred <- self$mod$predict(XX, se=T)
-       pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=T)
-       predall <- c(pred$fit, pred2$fit)
-       maxpred <- max(predall)
-       minpred <- min(predall)
-       relfuncval <- (pred$fit - minpred) / (maxpred - minpred)
-       relfuncval
+     self$scale_obj <- scale_obj
+     if (is.null(self$scale_obj)) {
+       # The objective is scaled to [0,1] if not using alpha and if not told not to.
+       # This ensures values are between [0,1], which is needed.
+       # Kim et al don't use scaling, this is just an alternative since I don't like their alpha regression.
+       self$scale_obj <- !use_alpha
      }
-     self$p = p_scaled_func
-     self$alpha = alpha
+     if (self$scale_obj) { # Scale objective to [0,1]
+       p_scaled_func = function(XX) {#browser()
+         pred <- self$mod$predict(XX, se=F)
+         pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
+         predall <- c(pred, pred2)
+         maxpred <- max(predall)
+         minpred <- min(predall)
+         relfuncval <- (pred - minpred) / (maxpred - minpred)
+         relfuncval
+       }
+       self$p <- p_scaled_func
+     } else if (use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
+      p_cropped_01 = function(XX) {
+        # p values should be between 0 and 1, so fix it here
+        pred <- self$mod$predict(XX)
+        num_less_0 <- sum(pred < 0)
+        num_great_1 <- sum(pred > 1)
+        if (num_less_0 > 0) { #browser()
+          print(paste(num_less_0, " p values below 0, setting them to 0"))
+          pred <- pmax(pred, 0)
+        }
+        if (num_great_1 > 1) { #browser()
+          print(paste(num_great_1, " p values above 1, setting them to 1"))
+          pred <- pmin(pred, 1)
+        }
+        pred
+      }
+      self$p <- p_cropped_01
+     } else { # Otherwise don't scale,
+       self$p <- self$mod$predict
+     }
+     self$alpha <- alpha
      self$use_alpha <- use_alpha
-     self$gamma = gamma
-     self$gammamax = NA
-     self$tau = tau
-     self$kappa = kappa
+     self$alpha_regression_i_values <- c()
+     self$alpha_regression_i_values <- c()
+     self$gamma <- gamma
+     self$gammamax <- NA
+     self$tau <- tau
+     self$kappa <- kappa
      self$delta <- 1e-3 # small positive number, no clue what it should be
      self$nb <- nb
 
@@ -501,11 +536,26 @@ bSMED <- R6::R6Class(classname = "bSMED",
     delete = function() {
       self$mod$delete()
     },
-    q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {browser()
+    q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {browser("I never use this")
       (1 - alpha * p(X)) ^ gamma
     },
     q_from_p = function(p, alpha=self$alpha, gamma=self$gamma) {
-      (1 - alpha * p) ^ gamma
+      omap <- 1 - alpha * p
+
+      # p values should be between 0 and 1, so fix it here
+      num_less_0 <- sum(omap < 0)
+      num_great_1 <- sum(omap > 1)
+      if (num_less_0 > 0) {browser()
+        print("Some p values below 0, setting them to 0")
+        omap <- pmax(omap, 0)
+      }
+      if (num_great_1 > 1) { browser()
+        print("Some p values above 1, setting them to 1")
+        omap <- pmin(omap, 1)
+      }
+
+      # (1 - alpha * p) ^ gamma
+      omap ^ gamma
     },
     E = function(X1=self$X, X2=NULL) {browser()
       print("Why are you using E? #532355")
@@ -561,8 +611,10 @@ bSMED <- R6::R6Class(classname = "bSMED",
         for (r in setdiff(1:nXopts, b_inds)) {
           if (runif(1) < .01) print("This can be made more efficient, see p16 #9235833")
           # Calculate Ebn where row r places l
+          if (any(is.nan(self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])))) {browser()}
           Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
           # If it's the min, update it
+          if (inherits(try(if(Ebnr < Ebn_star){}), "try-error")) {browser()}
           if (Ebnr < Ebn_star) {
             Ebn_star <- Ebnr
             Ebn_star_index <- r
@@ -583,16 +635,20 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #browser()
 
       # First get p since it is needed to calculate alpha (might not actually use)
-      pAll <- self$p(rbind(self$X, self$Xopts))
+      # pAll <- self$p(rbind(self$X, self$Xopts))
+      # self$pX <- pAll[1:nrow(self$X)]
+      # self$pXopts <- pAll[-(1:nrow(self$X))]
+      # Starting over below to do it right, adding Xoptsremoved to better estimate p
+      pAll <- self$p(rbind(self$X, self$Xopts, self$Xoptsremoved))
       self$pX <- pAll[1:nrow(self$X)]
-      self$pXopts <- pAll[-(1:nrow(self$X))]
+      self$pXopts <- pAll[(1+nrow(self$X)):(nrow(self$X)+nrow(self$Xopts))]
 
       # update params
       self$kappa <- (self$iteration - 1) / self$nb # p15 right column
       if (self$kappa > 1) {self$kappa <- 1} # Shouldn't be bigger than 1
       # TODO: update self$alpha with model
-      self$alpha <- if (self$iteration <=2 || !self$use_alpha) {1}
-                    else {self$update_alpha_regression()}
+      self$alpha <- if (self$iteration <=1 || !self$use_alpha) {print("Why not use on 2nd?");1}
+                    else {self$update_alpha_regression(max_pAll=max(pAll))}
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
 
@@ -623,27 +679,48 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$pXopts <- pAll[-(1:nrow(self$X))]
       self$qX <- self$q_from_p(self$pX)
       self$qXopts <- self$q_from_p(self$pXopts)
+      if (any(is.nan(self$qXopts))) {browser()}
+      self$q_from_p(self$pXopts)
+      12
     },
     update_p_and_q_values = function() {
+      stop("I think this is never used! #8293487372")
       pAll <- self$pgroup(rbind(self$X, self$Xopts))
       self$pX <- pAll[1:nrow(self$X),]
-      self$pXopts <- pAll[1:nrow(self$X), ]
+      self$pXopts <- pAll[- 1:nrow(self$X), ]
       self$qX <- self$q_from_p(self$pX)
       self$qXopts <- self$q_from_p(self$pXopts)
     },
-    update_alpha_regression = function() {browser()
+    update_alpha_regression = function(max_pAll) {#browser()
       # alpha is used to scale phat so max of alpha*p is at one
       # But if I'm using a scaled relative value, then it doesn't matter
       # So using this with relative values gives issues in log(1-alpha*maxp)
-      nb <- self$iteration - 2 # First was initial points, haven't done current yet
-      i_values0 <- 1:nb
-      pi_values0 <- sapply(1:nb, function(ii) {max(self$pX[1:(self$n0 + ii * self$b)])})
-      pnb <- pi_values0[nb]
-      #pnb <- max(self$pX)
+      nb <- self$iteration - 1 # First was initial points, haven't done current yet
+      print("Can't I use initial points?")
+      # i_values0 <- 1:nb
+      # pi_values0 <- sapply(1:nb, function(ii) {max(self$pX[1:(self$n0 + ii * self$b)])})
+      # pnb <- pi_values0[nb]
+
+
+      # p values for alpha regression are calculated after new data is added
+      # and model is updated
+      # Add value for most recently completed iteration
+      self$alpha_regression_i_values <- c(self$alpha_regression_i_values, self$iteration - 1)
+      self$alpha_regression_p_values <- c(self$alpha_regression_p_values, max_pAll)
+        if (self$iteration == 2) { # if running iter 2, we need to initialize
+          self$alpha_regression_i_values <- c(0, self$alpha_regression_i_values)
+          self$alpha_regression_p_values <- c(self$alpha_regression_p_values[1]/2, self$alpha_regression_p_values)
+        }
+
+      i_values0 <- self$alpha_regression_i_values
+      pi_values0 <- self$alpha_regression_p_values
+      pnb <- pi_values0[nb+1]
 
       pnb_bar <- (nb*pnb + 1) / (nb + 1)
-      i_values <- c(i_values0, 0, self$nb)
-      pi_values <- c(pi_values0, pi_values0[1]/2, pnb_bar)
+      # i_values <- c(i_values0, 0, self$nb)
+      # pi_values <- c(pi_values0, pi_values0[1]/2, pnb_bar)
+      i_values <- c(i_values0, self$nb)
+      pi_values <- c(pi_values0, pnb_bar)
 
       pgnb_lb <- (pnb + pnb_bar) / 2
 
@@ -663,8 +740,21 @@ bSMED <- R6::R6Class(classname = "bSMED",
 
       optim_out <- optim(par=c(pgnb_lb, 0, 0), fn=optim_fn)
       pgnb <- optim_out$par[1]
+      # These will plot the data and show the fitted line
+      # plot(i_values, pi_values)
+      # curve(pgnb * 1/(1 + exp(-optim_out$par[2] - x*optim_out$par[3])), add=T, col=2)
+
+      # If it is below lower bound, set it to be bound
+      # The lb is a weighted average of the current pi (pnb) and pnb_bar,
+      #  which is between pnb and 1, so lb should be higher than pnb.
+      #  But it won't be if pnb is above 1, which can happen if the model is bad?
+      #  Should I force p predictions to be between [0,1]???
+      if (pnb>1) {
+        browser(text = "I think is when there will be trouble, model predicts bigger than 1 but it shouldn't be allowed")
+      }
       if (pgnb < pgnb_lb) {
-        print("pgnb is lower than lb")
+        print("pgnb is lower than lb, setting to be lb to avoid big problems, this is what should be done, trust me (and Kim et al)")
+        pgnb <- pgnb_lb
       }
       alpha <- 1/pgnb
       print(paste("new alpha is", alpha))

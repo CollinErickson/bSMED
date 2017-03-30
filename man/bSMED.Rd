@@ -21,7 +21,7 @@ Class providing object with methods for bSMED
 
 \item{\code{Z}}{Responses}
 
-\item{\code{b}}{batch size}
+\item{\code{b}}{batch size to select each iteration}
 
 \item{\code{nb}}{Number of batches}
 
@@ -52,7 +52,7 @@ param_update = T, nug.update = self$nug.est)}}{This method updates the model, ad
   }
 }
 \examples{
-a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad",
+a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="func",
      n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
 a$run()
 }
