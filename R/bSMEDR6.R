@@ -96,6 +96,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     p = NULL,
     nb=NULL,
     use_design_region_fix = NULL,
+    exchange_algorithm_restarts = NULL,
 
     parallel = NULL, # Should the new values be calculated in parallel? Not for the model, for getting actual new Z values
     parallel_cores = NULL, # Number of cores used for parallel
@@ -109,6 +110,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          #design="sFFLHD",
                          p=NULL, alpha=1, use_alpha=T, scale_obj=NULL,
                          gamma=0, tau=0, kappa=0, use_design_region_fix = FALSE,
+                         exchange_algorithm_restarts=1,
                          X0, Xopts, b, nb,
                          estimate.nugget=FALSE, set.nugget=1e-12,
                          parallel=FALSE, parallel_cores="detect",
@@ -202,6 +204,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$delta <- 1e-3 # small positive number, no clue what it should be
       self$nb <- nb
       self$use_design_region_fix <- use_design_region_fix
+      self$exchange_algorithm_restarts <- exchange_algorithm_restarts
 
       # set objective function to minimize or pick dive area by max
       self$obj <- obj
@@ -633,7 +636,19 @@ bSMED <- R6::R6Class(classname = "bSMED",
       }
       Esum
     },
-    exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b) {#browser()
+    exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b, restarts=self$exchange_algorithm_restarts) {#browser()
+      best_b_inds <- NULL
+      best_Ebn <- Inf
+      for (rr in 1:self$exchange_algorithm_restarts) {
+        exchange_out <- self$exchange_algorithm_once(X=X, Xopts=Xopts, qX=qX, qXopts=qXopts, b=b)
+        if (exchange_out$Ebn < best_Ebn) {
+          best_b_inds <- exchange_out$b_inds
+          best_Ebn <- exchange_out$Ebn
+        }
+      }
+      best_b_inds
+    },
+    exchange_algorithm_once = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b) {#browser()
       if (nrow(Xopts) < b) {stop("Not enough points left to select #9813244")}
       if (nrow(Xopts) == b) {
         print("Only b options left, taking those #221771")
@@ -667,7 +682,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
           Ec <- Ebn_star
         }
       }
-      b_inds
+      # b_inds now return Ec so it can be run multiple times and take best
+      list(Ebn=Ec, b_inds=b_inds)
     },
     update_parameters = function() {
       if (self$iteration == 1) {return()}
