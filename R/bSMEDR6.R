@@ -95,6 +95,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     b = NULL,
     p = NULL,
     nb=NULL,
+    use_design_region_fix = NULL,
 
     parallel = NULL, # Should the new values be calculated in parallel? Not for the model, for getting actual new Z values
     parallel_cores = NULL, # Number of cores used for parallel
@@ -106,7 +107,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          func, func_run_together=FALSE,
                          #take_until_maxpvar_below=NULL,
                          #design="sFFLHD",
-                         p=NULL, alpha=1, use_alpha=T, scale_obj=NULL, gamma=0, tau=0, kappa=0,
+                         p=NULL, alpha=1, use_alpha=T, scale_obj=NULL,
+                         gamma=0, tau=0, kappa=0, use_design_region_fix = FALSE,
                          X0, Xopts, b, nb,
                          estimate.nugget=FALSE, set.nugget=1e-12,
                          parallel=FALSE, parallel_cores="detect",
@@ -199,6 +201,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$kappa <- kappa
       self$delta <- 1e-3 # small positive number, no clue what it should be
       self$nb <- nb
+      self$use_design_region_fix <- use_design_region_fix
 
       # set objective function to minimize or pick dive area by max
       self$obj <- obj
@@ -691,16 +694,22 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
 
-      # update regions
+      # Update design region
       if (TRUE & nrow(self$Xopts_removed)>0) { # This add the points back in for consideration
         # don't think it's in paper, but it makes sense since the model changes
         self$Xopts <- rbind(self$Xopts, self$Xopts_removed)
         self$Xopts_removed <- matrix(NA, 0, self$D)
       }
       mod.sample <- self$p(matrix(runif(1e4*self$D), ncol=self$D))
-      xi05 <- unname(quantile(mod.sample, 0.05))
-      xi95 <- unname(quantile(mod.sample, 0.95))
-      self$tau <- (1-self$kappa) * xi05 + self$kappa * xi95 # p15
+      if (self$use_design_region_fix) {
+        # This is an alternative to the paper. It uses the quantile of the average of .05 and .95 instead of the average of the 5th and 95th quantile.
+        xi_tau <- (1-self$kappa) * 0.05 + self$kappa * 0.95
+        self$tau <- unname(quantile(mod.sample, xi_tau))
+      } else {
+        xi05 <- unname(quantile(mod.sample, 0.05))
+        xi95 <- unname(quantile(mod.sample, 0.95))
+        self$tau <- (1-self$kappa) * xi05 + self$kappa * xi95 # p15
+      }
       pXopts <- self$p(self$Xopts)
       Xopts_inds_to_remove <- (pXopts < self$tau)
       if (sum(!Xopts_inds_to_remove) < self$b) {#browser()
