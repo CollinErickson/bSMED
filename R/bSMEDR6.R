@@ -48,59 +48,59 @@ if (F) {
 #'   }
 bSMED <- R6::R6Class(classname = "bSMED",
   public = list(
-   func = NULL, # "function", The function to calculate new values after selected
-   func_run_together = NULL, # Should the matrix of values to be run be passed to func as a matrix or by row?, useful if you parallelize your own function or call another program to get actual values
-   D = NULL, # "numeric",
-   L = NULL, # "numeric",
-   g = NULL, # "numeric", # g not used but I'll leave it for now
-   X = NULL, # "matrix", Z = "numeric", Xnotrun = "matrix",
-   #Xnotrun = NULL,
-   Z = NULL,
-   s = NULL, # "sFFLHD" an object with $get.batch to get batch of points
-   #design = NULL,
-   stats = NULL, # "list",
-   iteration = NULL, # "numeric",
-   obj = NULL, # "character",
-   obj_func = NULL, # "function",
-   obj_alpha = NULL,
-   scale_obj = NULL,
-   n0 = NULL, # "numeric"
-   #take_until_maxpvar_below = NULL,
-   package = NULL, # "character",
-   batch.tracker = NULL, # "numeric",
-   #force_old = NULL, # "numeric",
-   #force_pvar = NULL, # "numeric",
-   #useSMEDtheta = NULL, # "logical"
-   mod = NULL,
-   desirability_func = NULL, # args are mod and XX
+    func = NULL, # "function", The function to calculate new values after selected
+    func_run_together = NULL, # Should the matrix of values to be run be passed to func as a matrix or by row?, useful if you parallelize your own function or call another program to get actual values
+    D = NULL, # "numeric",
+    L = NULL, # "numeric",
+    g = NULL, # "numeric", # g not used but I'll leave it for now
+    X = NULL, # "matrix", Z = "numeric", Xnotrun = "matrix",
+    #Xnotrun = NULL,
+    Z = NULL,
+    s = NULL, # "sFFLHD" an object with $get.batch to get batch of points
+    #design = NULL,
+    stats = NULL, # "list",
+    iteration = NULL, # "numeric",
+    obj = NULL, # "character",
+    obj_func = NULL, # "function",
+    obj_alpha = NULL,
+    scale_obj = NULL,
+    n0 = NULL, # "numeric"
+    #take_until_maxpvar_below = NULL,
+    package = NULL, # "character",
+    batch.tracker = NULL, # "numeric",
+    #force_old = NULL, # "numeric",
+    #force_pvar = NULL, # "numeric",
+    #useSMEDtheta = NULL, # "logical"
+    mod = NULL,
+    desirability_func = NULL, # args are mod and XX
 
-   # adding for bSMED
-   phat = NULL,
-   alpha = NULL,
-   use_alpha = NULL,
-   alpha_regression_i_values = NULL,
-   alpha_regression_p_values = NULL,
-   gamma = NULL,
-   gammamax = NULL,
-   tau = NULL,
-   kappa = NULL,
-   delta = NULL,
-   Xopts=NULL,
-   X0=NULL,
-   Xopts_removed = NULL,
-   pX=NULL,
-   pXopts=NULL,
-   qX=NULL,
-   qXopts=NULL,
-   b = NULL,
-   p = NULL,
-   nb=NULL,
+    # adding for bSMED
+    phat = NULL,
+    alpha = NULL,
+    use_alpha = NULL,
+    alpha_regression_i_values = NULL,
+    alpha_regression_p_values = NULL,
+    gamma = NULL,
+    gammamax = NULL,
+    tau = NULL,
+    kappa = NULL,
+    delta = NULL,
+    Xopts=NULL,
+    X0=NULL,
+    Xopts_removed = NULL,
+    pX=NULL,
+    pXopts=NULL,
+    qX=NULL,
+    qXopts=NULL,
+    b = NULL,
+    p = NULL,
+    nb=NULL,
 
-   parallel = NULL, # Should the new values be calculated in parallel? Not for the model, for getting actual new Z values
-   parallel_cores = NULL, # Number of cores used for parallel
-   parallel_cluster = NULL, # The object for the cluster currently running
+    parallel = NULL, # Should the new values be calculated in parallel? Not for the model, for getting actual new Z values
+    parallel_cores = NULL, # Number of cores used for parallel
+    parallel_cluster = NULL, # The object for the cluster currently running
 
-   initialize = function(D,L,package=NULL, obj=NULL, n0=0,
+    initialize = function(D,L,package=NULL, obj=NULL, n0=0,
                          #force_old=0, force_pvar=0,
                          #useSMEDtheta=F,
                          func, func_run_together=FALSE,
@@ -111,54 +111,54 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          estimate.nugget=FALSE, set.nugget=1e-12,
                          parallel=FALSE, parallel_cores="detect",
                          ...) {#browser()
-     self$D <- D
-     self$L <- L
-     self$func <- func
-     self$func_run_together <- func_run_together
-     #self$force_old <- force_old
-     #self$force_pvar <- force_pvar
-     #self$take_until_maxpvar_below <- take_until_maxpvar_below
+      self$D <- D
+      self$L <- L
+      self$func <- func
+      self$func_run_together <- func_run_together
+      #self$force_old <- force_old
+      #self$force_pvar <- force_pvar
+      #self$take_until_maxpvar_below <- take_until_maxpvar_below
 
-     #if (any(length(D)==0, length(L)==0, length(g)==0)) {
-     if (any(length(D)==0, length(L)==0)) {
+      #if (any(length(D)==0, length(L)==0, length(g)==0)) {
+      if (any(length(D)==0, length(L)==0)) {
        message("D and L must be specified")
-     }
+      }
 
-     # self$design <- design
-     # if (self$design == "sFFLHD") {
-     #   #self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
-     # } else if (self$design == "random") {
-     #   self$s <- random_design$new(D=D, L=L)
-     # } else {
-     #   stop("No design 3285729")
-     # }
-     self$X <- matrix(NA,0,D)
-     #self$Xnotrun <- matrix(NA,0,D)
-     #if(length(lims)==0) {lims <<- matrix(c(0,1),D,2,byrow=T)}
-     #mod$initialize(package = "mlegp")
-     if(is.null(package)) {self$package <- "laGP"}
-     else {self$package <- package}
-     #self$mod <- UGP$new(package = self$package)
-     # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
-     self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
-     self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
-     self$iteration <- 1
-     self$obj_alpha <- 0.5
+      # self$design <- design
+      # if (self$design == "sFFLHD") {
+      #   #self$s <- sFFLHD::sFFLHD(D=D, L=L, maximin=F)
+      # } else if (self$design == "random") {
+      #   self$s <- random_design$new(D=D, L=L)
+      # } else {
+      #   stop("No design 3285729")
+      # }
+      self$X <- matrix(NA,0,D)
+      #self$Xnotrun <- matrix(NA,0,D)
+      #if(length(lims)==0) {lims <<- matrix(c(0,1),D,2,byrow=T)}
+      #mod$initialize(package = "mlegp")
+      if(is.null(package)) {self$package <- "laGP"}
+      else {self$package <- package}
+      #self$mod <- UGP$new(package = self$package)
+      # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
+      self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
+      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
+      self$iteration <- 1
+      self$obj_alpha <- 0.5
 
-     self$Xopts = Xopts
-     self$Xopts_removed <- matrix(NA, ncol=self$D, nrow=0)
-     self$X0 = X0
-     self$b <- b
-     # self$qX = NULL,
-     # self$qXopts = NULL,
-     self$scale_obj <- scale_obj
-     if (is.null(self$scale_obj)) {
+      self$Xopts = Xopts
+      self$Xopts_removed <- matrix(NA, ncol=self$D, nrow=0)
+      self$X0 = X0
+      self$b <- b
+      # self$qX = NULL,
+      # self$qXopts = NULL,
+      self$scale_obj <- scale_obj
+      if (is.null(self$scale_obj)) {
        # The objective is scaled to [0,1] if not using alpha and if not told not to.
        # This ensures values are between [0,1], which is needed.
        # Kim et al don't use scaling, this is just an alternative since I don't like their alpha regression.
        self$scale_obj <- !use_alpha
-     }
-     if (self$scale_obj) { # Scale objective to [0,1]
+      }
+      if (self$scale_obj) { # Scale objective to [0,1]
        p_scaled_func = function(XX) {#browser()
          pred <- self$mod$predict(XX, se=F)
          pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
@@ -169,7 +169,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
          relfuncval
        }
        self$p <- p_scaled_func
-     } else if (use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
+      } else if (use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
       p_cropped_01 = function(XX) {
         # p values should be between 0 and 1, so fix it here
         pred <- self$mod$predict(XX)
@@ -186,80 +186,80 @@ bSMED <- R6::R6Class(classname = "bSMED",
         pred
       }
       self$p <- p_cropped_01
-     } else { # Otherwise don't scale,
+      } else { # Otherwise don't scale,
        self$p <- self$mod$predict
-     }
-     self$alpha <- alpha
-     self$use_alpha <- use_alpha
-     self$alpha_regression_i_values <- c()
-     self$alpha_regression_i_values <- c()
-     self$gamma <- gamma
-     self$gammamax <- NA
-     self$tau <- tau
-     self$kappa <- kappa
-     self$delta <- 1e-3 # small positive number, no clue what it should be
-     self$nb <- nb
+      }
+      self$alpha <- alpha
+      self$use_alpha <- use_alpha
+      self$alpha_regression_i_values <- c()
+      self$alpha_regression_i_values <- c()
+      self$gamma <- gamma
+      self$gammamax <- NA
+      self$tau <- tau
+      self$kappa <- kappa
+      self$delta <- 1e-3 # small positive number, no clue what it should be
+      self$nb <- nb
 
-     # set objective function to minimize or pick dive area by max
-     self$obj <- obj
-     if (is.null(self$obj) || self$obj == "mse") { # The default
+      # set objective function to minimize or pick dive area by max
+      self$obj <- obj
+      if (is.null(self$obj) || self$obj == "mse") { # The default
        #self$obj <- "mse" # Don't want it to be character(0) when I have to check it later
        self$obj_func <- mod$predict.var #function(xx) {apply(xx, 1, mod$predict.var)}
        #function(lims) {
       #   msfunc(mod$predict.var, lims=lims, pow=1, batch=T)
       # }
-     } else if (self$obj == "maxerr") {
+      } else if (self$obj == "maxerr") {
        self$obj_func <- function(lims) {
          maxgridfunc(self$mod$predict.var, lims=lims, batch=T)
        }
-     } else if (self$obj == "grad") {
+      } else if (self$obj == "grad") {
        self$obj_func <- self$mod$grad_norm#{apply(xx, 1, mod$grad_norm)}
-     } else if (self$obj == "func") {
+      } else if (self$obj == "func") {
        #self$obj_func <- function(xx) max(1e-16, self$mod$predict(xx))#{apply(xx, 1, mod$grad_norm)}
        #self$obj_func <- function(xx) {pv <- self$mod$predict(xx);ifelse(pv<0,1e-16, pv)}
        self$obj_func <- function(xx) pmax(1e-16, self$mod$predict(xx))
-     } else if (self$obj == "pvar") {
+      } else if (self$obj == "pvar") {
        self$obj_func <- function(xx) pmax(1e-16, self$mod$predict.var(xx))#{apply(xx, 1, mod$grad_norm)}
-     } else if (self$obj == "gradpvaralpha") {
+      } else if (self$obj == "gradpvaralpha") {
        self$obj_func <- function(xx) { 1              *      self$mod$grad_norm(xx) +
                                        self$obj_alpha *      max(1e-16, self$mod$predict.se(xx))}
-     } else if (self$obj == "nonadapt") {
+      } else if (self$obj == "nonadapt") {
        # use next batch only #obj_func <<- NULL
-     } else if (self$obj == "desirability") {#browser()
+      } else if (self$obj == "desirability") {#browser()
        self$obj_func <- function(XX) {list(...)$desirability_func(mod=self$mod, XX=XX)}
        self$desirability_func <- list(...)$desirability_func
-     }
+      }
 
-     self$n0 <- nrow(X0) #n0
-     # Initial with X0 points
-     # self$X <- X0 #rbind(self$X, Xnew[1:self$n0, , drop=F])
-     # self$Z <- apply(self$X,1,self$func)
-     # self$mod$update(Xall=self$X, Zall=self$Z)
+      self$n0 <- nrow(X0) #n0
+      # Initial with X0 points
+      # self$X <- X0 #rbind(self$X, Xnew[1:self$n0, , drop=F])
+      # self$Z <- apply(self$X,1,self$func)
+      # self$mod$update(Xall=self$X, Zall=self$Z)
 
-     # No longer doing this to initalize data since the points come from a design
-     # if (length(self$n0) != 0 && self$n0 > 0) {
-     #   Xnew <- matrix(NA, 0, self$D)
-     #   while (nrow(Xnew) < self$n0) {
-     #     Xnew <- rbind(Xnew, self$s$get.batch())
-     #     self$batch.tracker <- rep(self$s$b,self$L)
-     #   }
-     #   self$X <- rbind(self$X, Xnew[1:self$n0, , drop=F])
-     #   self$Z <- c(self$Z, apply(self$X,1,self$func))
-     #   self$batch.tracker <- self$batch.tracker[-(1:self$n0)]
-     #   #if (nrow(Xnew) > self$n0) {
-     #   #  self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
-     #   #}
-     #   self$mod$update(Xall=self$X, Zall=self$Z)
-     # }
+      # No longer doing this to initalize data since the points come from a design
+      # if (length(self$n0) != 0 && self$n0 > 0) {
+      #   Xnew <- matrix(NA, 0, self$D)
+      #   while (nrow(Xnew) < self$n0) {
+      #     Xnew <- rbind(Xnew, self$s$get.batch())
+      #     self$batch.tracker <- rep(self$s$b,self$L)
+      #   }
+      #   self$X <- rbind(self$X, Xnew[1:self$n0, , drop=F])
+      #   self$Z <- c(self$Z, apply(self$X,1,self$func))
+      #   self$batch.tracker <- self$batch.tracker[-(1:self$n0)]
+      #   #if (nrow(Xnew) > self$n0) {
+      #   #  self$Xnotrun <- rbind(self$Xnotrun, Xnew[(self$n0+1):nrow(Xnew), , drop=F])
+      #   #}
+      #   self$mod$update(Xall=self$X, Zall=self$Z)
+      # }
 
-     #if (length(never_dive)==0) {never_dive <<- FALSE}
-     #if (length(force_old) == 0) {self$force_old <- 0}
-     #if (length(force_pvar) == 0) {self$force_pvar <- 0}
-     #self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
+      #if (length(never_dive)==0) {never_dive <<- FALSE}
+      #if (length(force_old) == 0) {self$force_old <- 0}
+      #if (length(force_pvar) == 0) {self$force_pvar <- 0}
+      #self$useSMEDtheta <- if (length(useSMEDtheta)==0) {FALSE} else {useSMEDtheta}
 
-     # Set up parallel stuff
-     self$parallel <- parallel
-     if (self$parallel) {
+      # Set up parallel stuff
+      self$parallel <- parallel
+      if (self$parallel) {
        # Use a list to store info about parallel, such as num nodes, cluster, etc
        if (parallel_cores == "detect") {
          self$parallel_cores <- parallel::detectCores()
@@ -270,20 +270,16 @@ bSMED <- R6::R6Class(classname = "bSMED",
        # For now assume using parallel package
 
        self$parallel_cluster <- parallel::makeCluster(spec = self$parallel_cores, type = "SOCK")
-
-
-
-
-     }
+      }
     },
     run = function(maxit=self$nb - self$iteration + 1, plotlastonly=F, noplot=F) {#browser()
-     i <- 1
-     while(i <= maxit) {
-       #print(paste('Starting iteration', iteration))
-       iplotit <- ((i == maxit) | !plotlastonly) & !noplot
-       self$run1(plotit=iplotit)
-       i <- i + 1
-     }
+      i <- 1
+      while(i <= maxit) {
+        #print(paste('Starting iteration', iteration))
+        iplotit <- ((i == maxit) | !plotlastonly) & !noplot
+        self$run1(plotit=iplotit)
+        i <- i + 1
+      }
     },
     run1 = function(plotit=TRUE) {#browser()#if(iteration>24)browser()
       if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389, initial design not big enough, b reached")}
@@ -299,7 +295,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #set_params()
       self$iteration <- self$iteration + 1
     },
-    calculate_Z = function(X) {browser()
+    calculate_Z = function(X) {#browser()
       # Used to just be apply(self$X, 1, self$func)
       if (self$parallel && inherits(self$parallel_cluster, "cluster")) {
         # parallel::clusterApply(cl = self$parallal_cluster, x = 1:nrow(X))
@@ -459,44 +455,44 @@ bSMED <- R6::R6Class(classname = "bSMED",
     set_params = function() {
     },
     update_stats = function() {
-     # self$stats$ <- c(self$stats$, )
-     self$stats$iteration <- c(self$stats$iteration, self$iteration)
-     self$stats$n <- c(self$stats$n, nrow(self$X))
-     #stats$level <<- c(stats$level, level)
-     self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
-     self$stats$mse <- c(self$stats$mse, msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
-     self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
-     self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
-     self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
+      # self$stats$ <- c(self$stats$, )
+      self$stats$iteration <- c(self$stats$iteration, self$iteration)
+      self$stats$n <- c(self$stats$n, nrow(self$X))
+      #stats$level <<- c(stats$level, level)
+      self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
+      self$stats$mse <- c(self$stats$mse, msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
+      self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
+      self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
+      self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
     },
     plot1 = function() {#browser()
-     if (self$D == 2) {
-       #par(mfrow=c(2,1))
-       ln <- 5 # number of lower plots
-       split.screen(matrix(
+      if (self$D == 2) {
+        #par(mfrow=c(2,1))
+        ln <- 5 # number of lower plots
+        split.screen(matrix(
          #c(0,.5,.25,1,  .5,1,.25,1,  0,1/3,0,.25, 1/3,2/3,0,.25, 2/3,1,0,.25),
          c(0,.5,.25,1,  .5,1,.25,1,  0,1/ln,0,.25, 1/ln,2/ln,0,.25, 2/ln,3/ln,0,.25, 3/ln,4/ln,0,.25, 4/ln,1,0,.25),
          ncol=4,byrow=T))
-       screen(1)
-       #xlim <- lims[1,]
-       #ylim <- lims[2,]
-       cf::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+        screen(1)
+        #xlim <- lims[1,]
+        #ylim <- lims[2,]
+        cf::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
               afterplotfunc=function(){points(self$X,pch=19)
                                        points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
               }
-       )
-       # Plot s2 predictions
-       screen(2)
-       cf::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+        )
+        # Plot s2 predictions
+        screen(2)
+        cf::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
                afterplotfunc=function(){points(self$X,pch=19)
                  points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
                  points(self$Xopts, col=2); # add points not selected
                }
-       )
-       screen(3) # actual squared error plot
-       par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-       cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
-       if (self$iteration >= 2) {
+        )
+        screen(3) # actual squared error plot
+        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
+        cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
+        if (self$iteration >= 2) {
          statsdf <- as.data.frame(self$stats)
          screen(4) # MSE plot
          par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
@@ -520,57 +516,57 @@ bSMED <- R6::R6Class(classname = "bSMED",
          plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
               xlab="Iteration")#, ylab="Level")
          legend('bottomleft',legend="% pts",fill=1)
-       }
-       screen(7) # actual squared error plot
-       par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-       cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
+        }
+        screen(7) # actual squared error plot
+        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
+        cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
                           n = 20, mainminmax_minmax = F, pretitle="SqErr ")
 
-       close.screen(all = TRUE)
-     } else { # D != 2
-       par(mfrow=c(2,2))
-       par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-       statsdf <- as.data.frame(self$stats)
-       #print(ggplot(statsdf, aes(x=iteration, y=mse, col=level)) + geom_line())
-       #print(ggplot() +
-       #        geom_line(data=statsdf, aes(x=iteration, y=mse, col="red")) +
-       #        geom_line(data=statsdf, aes(x=iteration, y=pvar, col="blue"))
-       #)
-       if (self$iteration >= 2) {
-         # 1 mse plot
-         plot(rep(statsdf$iter,2), c(statsdf$mse,statsdf$pvar),
+        close.screen(all = TRUE)
+      } else { # D != 2
+        par(mfrow=c(2,2))
+        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
+        statsdf <- as.data.frame(self$stats)
+        #print(ggplot(statsdf, aes(x=iteration, y=mse, col=level)) + geom_line())
+        #print(ggplot() +
+        #        geom_line(data=statsdf, aes(x=iteration, y=mse, col="red")) +
+        #        geom_line(data=statsdf, aes(x=iteration, y=pvar, col="blue"))
+        #)
+        if (self$iteration >= 2) {
+          # 1 mse plot
+          plot(rep(statsdf$iter,2), c(statsdf$mse,statsdf$pvar),
               type='o', log="y", col="white",
               xlab="Iteration", ylab=""
-         )
-         legend("topright",legend=c("MSE","PVar"),fill=c(1,2))
-         points(statsdf$iter, statsdf$mse, type='o', pch=19)
-         points(statsdf$iter, statsdf$pvar, type='o', pch = 19, col=2)
-         # 2 level plot
-         #plot(statsdf$iter, statsdf$level, type='o', pch=19)
-         #legend('topleft',legend="Level",fill=1)
-         Xplot <- matrix(runif(self$D*50), ncol=self$D)
-         Zplot.pred <- self$mod$predict(Xplot)
-         Zplot.act <- apply(Xplot,1, self$func)
-         Zplot.se <- self$mod$predict.se(Xplot)
-         Zused.pred <- self$mod$predict(self$X)
-         plot(NULL, xlim=c(min(self$Z, Zplot.act), max(self$Z, Zplot.act)),
+          )
+          legend("topright",legend=c("MSE","PVar"),fill=c(1,2))
+          points(statsdf$iter, statsdf$mse, type='o', pch=19)
+          points(statsdf$iter, statsdf$pvar, type='o', pch = 19, col=2)
+          # 2 level plot
+          #plot(statsdf$iter, statsdf$level, type='o', pch=19)
+          #legend('topleft',legend="Level",fill=1)
+          Xplot <- matrix(runif(self$D*50), ncol=self$D)
+          Zplot.pred <- self$mod$predict(Xplot)
+          Zplot.act <- apply(Xplot,1, self$func)
+          Zplot.se <- self$mod$predict.se(Xplot)
+          Zused.pred <- self$mod$predict(self$X)
+          plot(NULL, xlim=c(min(self$Z, Zplot.act), max(self$Z, Zplot.act)),
               ylim=c(min(Zused.pred, Zplot.pred), max(Zused.pred, Zplot.pred)))
-         abline(a = 0, b = 1)
-         points(Zplot.act, Zplot.pred, xlab="Z", ylab="Predicted")
-         points(self$Z, Zused.pred, col=2)
-         # 3 % pts used plot
-         plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
+          abline(a = 0, b = 1)
+          points(Zplot.act, Zplot.pred, xlab="Z", ylab="Predicted")
+          points(self$Z, Zused.pred, col=2)
+          # 3 % pts used plot
+          plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
               xlab="Iteration")#, ylab="Level")
-         legend('bottomleft',legend="% pts",fill=1)
-         # 4 grad vs pvar
-         Xplot <- matrix(runif(self$D*100), ncol=self$D)
-         Xplot_grad <- pmax(1e-8, self$mod$grad_norm(Xplot))#;browser()
-         Xplot_se <- pmax(1e-8, self$mod$predict.se(Xplot))
-         #if (any(Xplot_se <= 0)) {browser()}
-         #if (any(Xplot_grad < 0)) {browser()}
-         plot(Xplot_se, Xplot_grad, pch=19, xlab='SE', ylab='Grad', log='xy')
-       }
-     }
+          legend('bottomleft',legend="% pts",fill=1)
+          # 4 grad vs pvar
+          Xplot <- matrix(runif(self$D*100), ncol=self$D)
+          Xplot_grad <- pmax(1e-8, self$mod$grad_norm(Xplot))#;browser()
+          Xplot_se <- pmax(1e-8, self$mod$predict.se(Xplot))
+          #if (any(Xplot_se <= 0)) {browser()}
+          #if (any(Xplot_grad < 0)) {browser()}
+          plot(Xplot_se, Xplot_grad, pch=19, xlab='SE', ylab='Grad', log='xy')
+        }
+      }
     },
     q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {
       browser("I never use this, maybe should remove")
@@ -687,8 +683,11 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$kappa <- (self$iteration - 1) / self$nb # p15 right column
       if (self$kappa > 1) {self$kappa <- 1} # Shouldn't be bigger than 1
       # TODO: update self$alpha with model
-      self$alpha <- if (self$iteration <=1 || !self$use_alpha) {print("Why not use on 2nd?");1}
-                    else {self$update_alpha_regression(max_pAll=max(pAll))}
+      self$alpha <- if (self$iteration <=1 || !self$use_alpha) {
+                      1
+                    } else {
+                      self$update_alpha_regression(max_pAll=max(pAll))
+                    }
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
 
@@ -800,13 +799,13 @@ bSMED <- R6::R6Class(classname = "bSMED",
       print(paste("new alpha is", alpha))
       alpha
     },
-   delete = function() {browser()
-     self$mod$delete()
-     if (self$parallel) {
-       print("Deleting cluster")
-       parallel::stopCluster(cl = self$parallel_cluster)
-     }
-   }
+    delete = function() {#browser()
+      self$mod$delete()
+      if (self$parallel) {
+        print("Deleting cluster")
+        parallel::stopCluster(cl = self$parallel_cluster)
+      }
+    }
   )
 )
 
