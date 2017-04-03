@@ -50,6 +50,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
   public = list(
     func = NULL, # "function", The function to calculate new values after selected
     func_run_together = NULL, # Should the matrix of values to be run be passed to func as a matrix or by row?, useful if you parallelize your own function or call another program to get actual values
+    func_fast = NULL,
     D = NULL, # "numeric",
     L = NULL, # "numeric",
     g = NULL, # "numeric", # g not used but I'll leave it for now
@@ -105,7 +106,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     initialize = function(D,L,package=NULL, obj=NULL, n0=0,
                          #force_old=0, force_pvar=0,
                          #useSMEDtheta=F,
-                         func, func_run_together=FALSE,
+                         func, func_run_together=FALSE, func_fast=TRUE,
                          #take_until_maxpvar_below=NULL,
                          #design="sFFLHD",
                          p=NULL, alpha=1, use_alpha=T, scale_obj=NULL,
@@ -119,6 +120,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$L <- L
       self$func <- func
       self$func_run_together <- func_run_together
+      self$func_fast <- func_fast
       #self$force_old <- force_old
       #self$force_pvar <- force_pvar
       #self$take_until_maxpvar_below <- take_until_maxpvar_below
@@ -460,16 +462,23 @@ bSMED <- R6::R6Class(classname = "bSMED",
     # REMOVED get_mses AND should_dive
     set_params = function() {
     },
-    update_stats = function() {
+    update_stats = function() {browser()
       # self$stats$ <- c(self$stats$, )
       self$stats$iteration <- c(self$stats$iteration, self$iteration)
       self$stats$n <- c(self$stats$n, nrow(self$X))
       #stats$level <<- c(stats$level, level)
       self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
-      self$stats$mse <- c(self$stats$mse, msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
+      self$stats$mse <- c(self$stats$mse, self$mse_func()) #msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
       self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
       self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
       self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
+    },
+    mse_func = function() {
+      if (self$func_fast) {
+        msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D)))
+      } else {
+        NaN
+      }
     },
     plot1 = function() {#browser()
       if (self$D == 2) {
@@ -495,9 +504,11 @@ bSMED <- R6::R6Class(classname = "bSMED",
                  points(self$Xopts, col=2); # add points not selected
                }
         )
-        screen(3) # actual squared error plot
-        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-        cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
+        if (self$func_fast) {
+          screen(3) # actual squared error plot
+          par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
+          cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
+        }
         if (self$iteration >= 2) {
          statsdf <- as.data.frame(self$stats)
          screen(4) # MSE plot
@@ -523,10 +534,12 @@ bSMED <- R6::R6Class(classname = "bSMED",
               xlab="Iteration")#, ylab="Level")
          legend('bottomleft',legend="% pts",fill=1)
         }
-        screen(7) # actual squared error plot
-        par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-        cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
-                          n = 20, mainminmax_minmax = F, pretitle="SqErr ")
+        if (self$func_fast) {
+          screen(7) # actual squared error plot
+          par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
+          cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
+                            n = 20, mainminmax_minmax = F, pretitle="SqErr ")
+        }
 
         close.screen(all = TRUE)
       } else { # D != 2
@@ -551,14 +564,19 @@ bSMED <- R6::R6Class(classname = "bSMED",
           #plot(statsdf$iter, statsdf$level, type='o', pch=19)
           #legend('topleft',legend="Level",fill=1)
           Xplot <- matrix(runif(self$D*50), ncol=self$D)
-          Zplot.pred <- self$mod$predict(Xplot)
-          Zplot.act <- apply(Xplot,1, self$func)
+          if (self$func_fast) {
+            Zplot.pred <- self$mod$predict(Xplot)
+            Zplot.act <- apply(Xplot,1, self$func)
+          } else {
+            Zplot.pred <- c()
+            Zplot.act <- c()
+          }
           Zplot.se <- self$mod$predict.se(Xplot)
           Zused.pred <- self$mod$predict(self$X)
           plot(NULL, xlim=c(min(self$Z, Zplot.act), max(self$Z, Zplot.act)),
               ylim=c(min(Zused.pred, Zplot.pred), max(Zused.pred, Zplot.pred)))
           abline(a = 0, b = 1)
-          points(Zplot.act, Zplot.pred, xlab="Z", ylab="Predicted")
+          if (self$func_fast) {points(Zplot.act, Zplot.pred, xlab="Z", ylab="Predicted")}
           points(self$Z, Zused.pred, col=2)
           # 3 % pts used plot
           plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
