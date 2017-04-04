@@ -288,6 +288,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
         self$run1(plotit=iplotit)
         i <- i + 1
       }
+
+      # If at end, print out results
+      self$print_results()
     },
     run1 = function(plotit=TRUE) {#browser()#if(iteration>24)browser()
       if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389, initial design not big enough, b reached")}
@@ -462,7 +465,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     # REMOVED get_mses AND should_dive
     set_params = function() {
     },
-    update_stats = function() {browser()
+    update_stats = function() {#browser()
       # self$stats$ <- c(self$stats$, )
       self$stats$iteration <- c(self$stats$iteration, self$iteration)
       self$stats$n <- c(self$stats$n, nrow(self$X))
@@ -654,11 +657,35 @@ bSMED <- R6::R6Class(classname = "bSMED",
       }
       Esum
     },
+    Ebn_speedup_lasttwoterms = function(X1=self$X, X2_without_Xl=NULL, Xr, qr, q1=NULL, q2_without_ql=NULL) {#browser()
+      n <- nrow(X1)
+      b <- nrow(X2_without_Xl)
+      X <- rbind(X1, X2_without_Xl) # X2 must be below X1
+      qq <- c(q1, q2_without_ql) # q is quit function
+      if (is.null(qq)) {
+        print('Calculating q values in Ebn, pass q for faster #5238528')
+        qq <- self$q(X)
+      }
+      # Sum over points in design
+      Esum3 <- 0
+      for (k in 1:n) {
+        Esum3 <- Esum3 + qr * qq[k] / sqrt(sum((Xr - X[k,])^2))
+      }
+      # Sum over candidates temporarily in design
+      Esum4 <- 0
+      for (k in (n+1):(n+b)) {
+        Esum4 <- Esum4 + qr * qq[k] / sqrt(sum((Xr - X[k,])^2))
+      }
+      # Return both
+      Esum3 + Esum4
+    },
     exchange_algorithm = function(X=self$X, Xopts=self$Xopts, qX=self$qX, qXopts=self$qXopts, b=self$b, restarts=self$exchange_algorithm_restarts) {#browser()
       best_b_inds <- NULL
       best_Ebn <- Inf
       for (rr in 1:self$exchange_algorithm_restarts) {
-        exchange_out <- self$exchange_algorithm_once(X=X, Xopts=Xopts, qX=qX, qXopts=qXopts, b=b)
+        print(system.time({
+          exchange_out <- self$exchange_algorithm_once(X=X, Xopts=Xopts, qX=qX, qXopts=qXopts, b=b)
+        }))
         if (exchange_out$Ebn < best_Ebn) {
           best_b_inds <- exchange_out$b_inds
           best_Ebn <- exchange_out$Ebn
@@ -676,15 +703,31 @@ bSMED <- R6::R6Class(classname = "bSMED",
       b_inds <- sample(1:nXopts, b, replace=FALSE)
       Xb <- Xopts[b_inds, ]
       Ec <- self$Ebn(X1=X, X2=Xb, q1=qX, q2=qXopts[b_inds])
-      #l <- 1
+
+      # The speedup on p16 lets you not recalculate full energy each time
+      use_speedup <- TRUE
+      # I found the calculations are indeed exact same with and without, so this should be true
+      # From total time 2.1 sec to 1.42 on 2D test, so not huge, but could be big reduction for this function
+      # Just this function: slow .33 .34 .2  .13
+      #                     fast .09 .06 .06 .03, so at least 3x speedup
+
+      # Loop over indices in selected candidate points to replace them if any other candidate lowers energy
       for (l in 1:b) {
         Ebn_star <- Ec
         Ebn_star_index <- NA
+        if (use_speedup) {
+          Ebnl_twoterms <- self$Ebn_speedup_lasttwoterms(X1=X, X2_without_Xl=Xopts[b_inds[-l],], Xr=Xopts[b_inds[l],], qr=qXopts[b_inds[l]], q1=qX, q2_without_ql=qXopts[b_inds[-l]])
+        }
         for (r in setdiff(1:nXopts, b_inds)) {
-          if (runif(1) < .01) print("This can be made more efficient, see p16 #9235833")
           # Calculate Ebn where row r places l
           # if (any(is.nan(self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])))) {browser()}
-          Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
+          if (use_speedup) {
+            Ebnr_twoterms <- self$Ebn_speedup_lasttwoterms(X1=X, X2_without_Xl=Xopts[b_inds[-l],], Xr=Xopts[r,], qr=qXopts[r], q1=qX, q2_without_ql=qXopts[b_inds[-l]])
+            Ebnr <- Ec - Ebnl_twoterms + Ebnr_twoterms
+          } else {
+            Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
+          }
+          # print(paste("Diff with speedup it", Ebnr_old - Ebnr))
           # If it's the min, update it
           # if (inherits(try(if(Ebnr < Ebn_star){}), "try-error")) {browser()}
           if (Ebnr < Ebn_star) {
@@ -842,6 +885,15 @@ bSMED <- R6::R6Class(classname = "bSMED",
       print(paste("new alpha is", alpha))
       alpha
     },
+    print_results = function() { #browser()
+      best_index <- which.max(self$Z)
+      bestZ <- self$Z[best_index]
+      bestX <- self$X[best_index, ]
+      # print(paste0("Best design point is ", paste(bestX, collapse = ''),
+      #              " with objective value ", bestZ))
+      cat("Best design point is ", signif(bestX, 3),
+                   " with objective value ", bestZ, '\n')
+    },
     delete = function() {#browser()
       self$mod$delete()
       if (self$parallel) {
@@ -930,4 +982,11 @@ if (F) {
                  b=3, nb=4, X0=lhs::maximinLHS(20, 2), Xopts=lhs::maximinLHS(10, 2))
   a$run(2)
 
+}
+if (F) {
+  quad_peaks <- function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}
+  quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.01,.01))
+  cf::cf(quad_peaks)
+  cf::cf(quad_peaks_slant)
+  a <- bSMED$new(D=2,L=1003,func=quad_peaks_slant, obj="func", n0=0,b=3, nb=5, X0=rbind(c(.5,.5),lhs::maximinLHS(20,2)), Xopts=lhs::maximinLHS(500,2), use_alpha=T, package="laGP", parallel=F, use_design_region_fix=T, func_fast=T);a$run()
 }
