@@ -36,6 +36,11 @@ if (F) {
 #' @field stats List of tracked stats
 #' @field iteration Which iteration
 #' @field mod The GP model from IGP
+#' @field obj Character telling what the objective function is, e.g. max or grad
+#' @field obj_func Function to evaluate the objective
+#' @field obj_alpha A parameter that can be used to have model focus on uncertain areas when model is poor
+#' @field scale_obj If the objective is not in [0,1], then this will scale it so it works with this method. Implementation not working now.
+#' @field n0 How many points were in initial design, not important since X0 must be given in
 #' @section Methods:
 #' \describe{
 #'   \item{Documentation}{For full documentation of each method go to https://github.com/CollinErickson/bSMED}
@@ -57,7 +62,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     X = NULL, # "matrix", Z = "numeric", Xnotrun = "matrix",
     #Xnotrun = NULL,
     Z = NULL,
-    s = NULL, # "sFFLHD" an object with $get.batch to get batch of points
+    # s = NULL, # "sFFLHD" an object with $get.batch to get batch of points
     #design = NULL,
     stats = NULL, # "list",
     iteration = NULL, # "numeric",
