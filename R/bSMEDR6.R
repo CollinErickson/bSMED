@@ -108,7 +108,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
     parallel_cores = NULL, # Number of cores used for parallel
     parallel_cluster = NULL, # The object for the cluster currently running
 
-    initialize = function(D,L,package=NULL, obj=NULL, n0=0,
+    verbose = NULL, # 0 means print nothing, 1 means print somewhat important things, 2 means print a lot
+
+    initialize = function(D,L=NULL,package=NULL, obj=NULL, n0=0,
                          #force_old=0, force_pvar=0,
                          #useSMEDtheta=F,
                          func, func_run_together=FALSE, func_fast=TRUE,
@@ -120,6 +122,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
                          X0, Xopts, b, nb,
                          estimate.nugget=FALSE, set.nugget=1e-12,
                          parallel=FALSE, parallel_cores="detect",
+                         verbose=0,
                          ...) {#browser()
       self$D <- D
       self$L <- L
@@ -129,10 +132,12 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #self$force_old <- force_old
       #self$force_pvar <- force_pvar
       #self$take_until_maxpvar_below <- take_until_maxpvar_below
+      self$verbose <- verbose
 
       #if (any(length(D)==0, length(L)==0, length(g)==0)) {
-      if (any(length(D)==0, length(L)==0)) {
-       message("D and L must be specified")
+      # if (any(length(D)==0, length(L)==0)) {
+      if (any(length(D)==0)) {
+       message("D must be specified")
       }
 
       # self$design <- design
@@ -295,7 +300,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
       }
 
       # If at end, print out results
-      self$print_results()
+      if (self$iteration > self$nb) { # At end iteration == nb+1
+        self$print_results()
+      }
     },
     run1 = function(plotit=TRUE) {#browser()#if(iteration>24)browser()
       if (nrow(self$Xopts) + nrow(self$Xopts_removed) < self$b) {stop("Not enough points left to get a batch #82389, initial design not big enough, b reached")}
@@ -688,9 +695,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
       best_b_inds <- NULL
       best_Ebn <- Inf
       for (rr in 1:self$exchange_algorithm_restarts) {
-        print(system.time({
+        #print(system.time({
           exchange_out <- self$exchange_algorithm_once(X=X, Xopts=Xopts, qX=qX, qXopts=qXopts, b=b)
-        }))
+        #}))
         if (exchange_out$Ebn < best_Ebn) {
           best_b_inds <- exchange_out$b_inds
           best_Ebn <- exchange_out$Ebn
@@ -798,7 +805,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         print("Tau takes too many, leaving best b")
         Xopts_inds_to_remove <- (pXopts < sort(pXopts, decreasing = TRUE)[self$b])
       }
-      print(paste("Removed", sum(Xopts_inds_to_remove), "points"))
+      if (self$verbose >= 1) {print(paste("Removed", sum(Xopts_inds_to_remove), "points"))}
       self$Xopts_removed <- rbind(self$Xopts_removed, self$Xopts[Xopts_inds_to_remove, ])
       self$Xopts <- self$Xopts[!Xopts_inds_to_remove, ]
 
@@ -826,7 +833,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # But if I'm using a scaled relative value, then it doesn't matter
       # So using this with relative values gives issues in log(1-alpha*maxp)
       nb <- self$iteration - 1 # First was initial points, haven't done current yet
-      print("Can't I use initial points?")
+      # print("Can't I use initial points?") I think I do now, see if statement below when running iter 2
       # i_values0 <- 1:nb
       # pi_values0 <- sapply(1:nb, function(ii) {max(self$pX[1:(self$n0 + ii * self$b)])})
       # pnb <- pi_values0[nb]
@@ -883,21 +890,35 @@ bSMED <- R6::R6Class(classname = "bSMED",
         browser(text = "I think is when there will be trouble, model predicts bigger than 1 but it shouldn't be allowed")
       }
       if (pgnb < pgnb_lb) {
-        print("pgnb is lower than lb, setting to be lb to avoid big problems, this is what should be done, trust me (and Kim et al)")
+        if (self$verbose >= 1) {
+          print("pgnb is lower than lb, setting to be lb to avoid big problems, this is what should be done, trust me (and Kim et al)")
+        }
         pgnb <- pgnb_lb
       }
       alpha <- 1/pgnb
-      print(paste("new alpha is", alpha))
+      if (self$verbose >=1) {print(paste("new alpha is", alpha))}
       alpha
     },
-    print_results = function() { #browser()
+    print_results = function(give_best_prediction=TRUE) { #browser()
       best_index <- which.max(self$Z)
       bestZ <- self$Z[best_index]
       bestX <- self$X[best_index, ]
       # print(paste0("Best design point is ", paste(bestX, collapse = ''),
       #              " with objective value ", bestZ))
-      cat("Best design point is ", signif(bestX, 3),
-                   " with objective value ", bestZ, '\n')
+      cat("Best design point is\n\t\t", signif(bestX, 3),
+                   "\n\twith objective value\n\t\t", bestZ, '\n')
+
+      if (give_best_prediction) {
+        XX <- matrix(runif(1e4*self$D), ncol=self$D)
+        ZZ <- self$mod$predict(XX)
+        best_index2 <- which.max(ZZ)
+        optim(XX[best_index2, ], fn=self$mod$predict)
+        optim.out <- optim(XX[best_index2, ], fn=self$mod$predict, lower = rep(0, self$D), upper = rep(1, self$D), method = "L-BFGS-B", control = list(fnscale=-1))
+        optim_par <- optim.out$par
+        optim_val <- optim.out$val
+        cat("Best predicted point over domain is \n\t\t", signif(optim_par, 3),
+                                      "\n\twith objective value\n\t\t", optim_val, '\n')
+      }
     },
     delete = function() {#browser()
       self$mod$delete()
@@ -990,7 +1011,7 @@ if (F) {
 }
 if (F) {
   quad_peaks <- function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}
-  quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.01,.01))
+  quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.02,.01))
   cf::cf(quad_peaks)
   cf::cf(quad_peaks_slant)
   a <- bSMED$new(D=2,L=1003,func=quad_peaks_slant, obj="func", n0=0,b=3, nb=5, X0=rbind(c(.5,.5),lhs::maximinLHS(20,2)), Xopts=lhs::maximinLHS(500,2), use_alpha=T, package="laGP", parallel=F, use_design_region_fix=T, func_fast=T);a$run()
