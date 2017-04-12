@@ -28,7 +28,7 @@ if (F) {
 #' @field X Design matrix
 #' @field Z Responses
 #' @field b batch size to select each iteration
-#' @field nb Number of batches
+#' @field nb Number of batches, includes the first iteration taking X0
 #' @field D Dimension of data
 #' @field Xopts Available points
 #' @field X0 Initial design
@@ -110,7 +110,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
 
     verbose = NULL, # 0 means print nothing, 1 means print somewhat important things, 2 means print a lot
 
-    initialize = function(D,L=NULL,package=NULL, obj=NULL, n0=0,
+    initialize = function(D,L=NULL,package="laGP", obj=NULL, n0=0,
                          #force_old=0, force_pvar=0,
                          #useSMEDtheta=F,
                          func, func_run_together=FALSE, func_fast=TRUE,
@@ -152,8 +152,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #self$Xnotrun <- matrix(NA,0,D)
       #if(length(lims)==0) {lims <<- matrix(c(0,1),D,2,byrow=T)}
       #mod$initialize(package = "mlegp")
-      if(is.null(package)) {self$package <- "laGP"}
-      else {self$package <- package}
+      # if(is.null(package)) {self$package <- "laGP"}
+      # else {self$package <- package}
+      self$package <- package
       #self$mod <- UGP$new(package = self$package)
       # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
       self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
@@ -167,48 +168,12 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$b <- b
       # self$qX = NULL,
       # self$qXopts = NULL,
-      self$scale_obj <- scale_obj
-      if (is.null(self$scale_obj)) {
-       # The objective is scaled to [0,1] if not using alpha and if not told not to.
-       # This ensures values are between [0,1], which is needed.
-       # Kim et al don't use scaling, this is just an alternative since I don't like their alpha regression.
-       self$scale_obj <- !use_alpha
-      }
-      if (self$scale_obj) { # Scale objective to [0,1]
-       p_scaled_func = function(XX) {#browser()
-         pred <- self$mod$predict(XX, se=F)
-         pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
-         predall <- c(pred, pred2)
-         maxpred <- max(predall)
-         minpred <- min(predall)
-         relfuncval <- (pred - minpred) / (maxpred - minpred)
-         relfuncval
-       }
-       self$p <- p_scaled_func
-      } else if (use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
-      p_cropped_01 = function(XX) {
-        # p values should be between 0 and 1, so fix it here
-        pred <- self$mod$predict(XX)
-        num_less_0 <- sum(pred < 0)
-        num_great_1 <- sum(pred > 1)
-        if (num_less_0 > 0) { #browser()
-          print(paste(num_less_0, " p values below 0, setting them to 0"))
-          pred <- pmax(pred, 0)
-        }
-        if (num_great_1 > 1) { #browser()
-          print(paste(num_great_1, " p values above 1, setting them to 1"))
-          pred <- pmin(pred, 1)
-        }
-        pred
-      }
-      self$p <- p_cropped_01
-      } else { # Otherwise don't scale,
-       self$p <- self$mod$predict
-      }
+
+
       self$alpha <- alpha
       self$use_alpha <- use_alpha
       self$alpha_regression_i_values <- c()
-      self$alpha_regression_i_values <- c()
+      self$alpha_regression_p_values <- c()
       self$gamma <- gamma
       self$gammamax <- NA
       self$tau <- tau
@@ -217,6 +182,62 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$nb <- nb
       self$use_design_region_fix <- use_design_region_fix
       self$exchange_algorithm_restarts <- exchange_algorithm_restarts
+
+
+      self$scale_obj <- scale_obj
+
+      if (is.null(self$scale_obj)) {
+       # The objective is scaled to [0,1] if not using alpha and if not told not to.
+       # This ensures values are between [0,1], which is needed.
+       # Kim et al don't use scaling, this is just an alternative since I don't like their alpha regression.
+       self$scale_obj <- !use_alpha
+      }
+
+      if (self$scale_obj) { # Scale objective to [0,1]
+       #  old version where range is exactly [0,1]
+       #  p_scaled_func = function(XX) {#browser()
+       #   pred <- self$mod$predict(XX, se=F)
+       #   pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
+       #   predall <- c(pred, pred2)
+       #   maxpred <- max(predall)
+       #   minpred <- min(predall)
+       #   relfuncval <- (pred - minpred) / (maxpred - minpred)
+       #   relfuncval
+       # }
+       p_scaled_func = function(XX) {#print(str(XX));browser()
+         pred <- self$mod$predict(XX, se=T)
+         XXX <- matrix(runif(1000*self$D), ncol=self$D)
+         pred2 <- self$mod$predict(XXX, se=T)
+         # predall <- c(pred, pred2)
+         maxpred <- max(pred$fit +2*pmax(pred$se, 1e-8), # Adding 1e-8 makes sure all relfuncvals are less than 1
+                        pred2$fit+2*pmax(pred2$se, 1e-8))
+         minpred <- min(pred$fit, pred2$fit)
+         relfuncval <- (pred$fit - minpred) / (maxpred - minpred)
+         #print(str(XX))
+         #print(summary(relfuncval))
+         relfuncval
+       }
+       self$p <- p_scaled_func
+      } else if (self$use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
+        p_cropped_01 = function(XX) {
+          # p values should be between 0 and 1, so fix it here
+          pred <- self$mod$predict(XX)
+          num_less_0 <- sum(pred < 0)
+          num_great_1 <- sum(pred > 1)
+          if (num_less_0 > 0) { #browser()
+            print(paste(num_less_0, " p values below 0, setting them to 0"))
+            pred <- pmax(pred, 0)
+          }
+          if (num_great_1 > 1) { #browser()
+            print(paste(num_great_1, " p values above 1, setting them to 1"))
+            pred <- pmin(pred, 1)
+          }
+          pred
+        }
+        self$p <- p_cropped_01
+      } else { # Otherwise don't scale,
+       self$p <- self$mod$predict
+      }
 
       # set objective function to minimize or pick dive area by max
       self$obj <- obj
@@ -322,12 +343,21 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # Used to just be apply(self$X, 1, self$func)
       if (self$parallel && inherits(self$parallel_cluster, "cluster")) {
         # parallel::clusterApply(cl = self$parallal_cluster, x = 1:nrow(X))
-        parallel::parRapply(cl = self$parallel_cluster, x = X, self$func)
+        Z <- parallel::parRapply(cl = self$parallel_cluster, x = X, self$func)
       } else if (self$func_run_together) {
-        self$func(X)
+        Z <- self$func(X)
       } else {
-        apply(X, 1, self$func)
+        Z <- apply(X, 1, self$func)
       }
+      if (self$use_alpha) {
+        if (any(Z < 0)) {
+          warning("A function value is < 0, it is assumed all values are within [0,1]. If it is a near-zero negative number than this should work without major problems.")
+        }
+        if (any(Z > 1)) {
+          warning("A function value is > 1, it is assumed all values are within [0,1]. This may cause major problems.")
+        }
+      }
+      Z
     },
     add_data = function() {#browser()
       # If first time
@@ -608,7 +638,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       }
     },
     q = function(X, p=self$p, alpha=self$alpha, gamma=self$gamma) {
-      browser("I never use this, maybe should remove")
+      warning("I never use this, maybe should remove, in q #0923848")
       (1 - alpha * p(X)) ^ gamma
     },
     q_from_p = function(p, alpha=self$alpha, gamma=self$gamma) {
@@ -780,8 +810,13 @@ bSMED <- R6::R6Class(classname = "bSMED",
                     } else {
                       self$update_alpha_regression(max_pAll=max(pAll))
                     }
+      # print(1 - self$alpha * max(self$p(self$X)))
+      #browser()
       self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
       self$gamma <- self$kappa * self$gammamax
+      if (self$gammamax==0 || self$gamma==0) {
+        warning("gamma and/or gammamax equal zero, so it's not working right. This is very bad and means it isn't doing the energy properly.")
+      }
 
       # Update design region
       if (TRUE & nrow(self$Xopts_removed)>0) { # This add the points back in for consideration
