@@ -70,6 +70,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
     obj_func = NULL, # "function",
     obj_alpha = NULL,
     scale_obj = NULL,
+    alpha_regression_scale_obj_i_values = NULL,
+    alpha_regression_scale_obj_p_values = NULL,
     n0 = NULL, # "numeric"
     #take_until_maxpvar_below = NULL,
     package = NULL, # "character",
@@ -190,21 +192,21 @@ bSMED <- R6::R6Class(classname = "bSMED",
        # The objective is scaled to [0,1] if not using alpha and if not told not to.
        # This ensures values are between [0,1], which is needed.
        # Kim et al don't use scaling, this is just an alternative since I don't like their alpha regression.
-       self$scale_obj <- !use_alpha
+       self$scale_obj <- !self$use_alpha
       }
 
-      if (self$scale_obj) { # Scale objective to [0,1]
-       #  old version where range is exactly [0,1]
-       #  p_scaled_func = function(XX) {#browser()
-       #   pred <- self$mod$predict(XX, se=F)
-       #   pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
-       #   predall <- c(pred, pred2)
-       #   maxpred <- max(predall)
-       #   minpred <- min(predall)
-       #   relfuncval <- (pred - minpred) / (maxpred - minpred)
-       #   relfuncval
-       # }
-       p_scaled_func = function(XX) {#print(str(XX));browser()
+      if (self$scale_obj && !self$use_alpha) { # Scale objective to [0,1]
+        #  old version where range is exactly [0,1]
+        #  p_scaled_func = function(XX) {#browser()
+        #   pred <- self$mod$predict(XX, se=F)
+        #   pred2 <- self$mod$predict(matrix(runif(1000*self$D), ncol=self$D), se=F)
+        #   predall <- c(pred, pred2)
+        #   maxpred <- max(predall)
+        #   minpred <- min(predall)
+        #   relfuncval <- (pred - minpred) / (maxpred - minpred)
+        #   relfuncval
+        # }
+        p_scaled_func = function(XX) {#print(str(XX));browser()
          pred <- self$mod$predict(XX, se=T)
          XXX <- matrix(runif(1000*self$D), ncol=self$D)
          pred2 <- self$mod$predict(XXX, se=T)
@@ -216,8 +218,10 @@ bSMED <- R6::R6Class(classname = "bSMED",
          #print(str(XX))
          #print(summary(relfuncval))
          relfuncval
-       }
-       self$p <- p_scaled_func
+        }
+        self$p <- p_scaled_func
+      } else if (self$scale_obj && self$use_alpha) {
+        self$p <- self$mod$predict
       } else if (self$use_alpha) { # Scale function to [0,1] to avoid problems in calculating q, at least to need to scale below 1
         p_cropped_01 = function(XX) {
           # p values should be between 0 and 1, so fix it here
@@ -236,7 +240,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         }
         self$p <- p_cropped_01
       } else { # Otherwise don't scale,
-       self$p <- self$mod$predict
+        self$p <- self$mod$predict
       }
 
       # set objective function to minimize or pick dive area by max
@@ -349,7 +353,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       } else {
         Z <- apply(X, 1, self$func)
       }
-      if (self$use_alpha) {
+      if (self$use_alpha && !self$scale_obj) {
         if (any(Z < 0)) {
           warning("A function value is < 0, it is assumed all values are within [0,1]. If it is a near-zero negative number than this should work without major problems.")
         }
@@ -641,8 +645,13 @@ bSMED <- R6::R6Class(classname = "bSMED",
       warning("I never use this, maybe should remove, in q #0923848")
       (1 - alpha * p(X)) ^ gamma
     },
-    q_from_p = function(p, alpha=self$alpha, gamma=self$gamma) {
-      omap <- 1 - alpha * p
+    q_from_p = function(p, alpha=self$alpha, gamma=self$gamma) {#browser()
+      if (self$scale_obj && self$use_alpha) { # Do my weird stuff
+        alpha_p <- (p - alpha[1]) / (alpha[2] - alpha[1])
+        omap <- 1 - alpha_p
+      } else {
+        omap <- 1 - alpha * p
+      }
 
       # This section shouldn't be used since it is taken care of
       #  when using alpha regression or scale_obj, only might be
@@ -753,6 +762,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # Just this function: slow .33 .34 .2  .13
       #                     fast .09 .06 .06 .03, so at least 3x speedup
 
+      # if (self$iteration==6) {browser()}
       # Loop over indices in selected candidate points to replace them if any other candidate lowers energy
       for (l in 1:b) {
         Ebn_star <- Ec
@@ -760,6 +770,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         if (use_speedup) {
           Ebnl_twoterms <- self$Ebn_speedup_lasttwoterms(X1=X, X2_without_Xl=Xopts[b_inds[-l],], Xr=Xopts[b_inds[l],], qr=qXopts[b_inds[l]], q1=qX, q2_without_ql=qXopts[b_inds[-l]])
         }
+        Ebns <- rep(NaN, nXopts) # Use this to check results after loop below
         for (r in setdiff(1:nXopts, b_inds)) {
           # Calculate Ebn where row r places l
           # if (any(is.nan(self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])))) {browser()}
@@ -769,6 +780,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
           } else {
             Ebnr <- self$Ebn(X, Xopts[c(b_inds[-l],r),], qX, qXopts[c(b_inds[-l],r)])
           }
+          Ebns[r] <- Ebnr
           # print(paste("Diff with speedup it", Ebnr_old - Ebnr))
           # If it's the min, update it
           # if (inherits(try(if(Ebnr < Ebn_star){}), "try-error")) {browser()}
@@ -805,15 +817,30 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$kappa <- (self$iteration - 1) / self$nb # p15 right column
       if (self$kappa > 1) {self$kappa <- 1} # Shouldn't be bigger than 1
       # TODO: update self$alpha with model
+      #browser()
       self$alpha <- if (self$iteration <=1 || !self$use_alpha) {
                       1
-                    } else {
+                    } else if (self$use_alpha && self$scale_obj) {
+                      self$update_alpha_regression_scale_obj(max_pAll = max(pAll), max_pX=max(self$pX), min_Pall=min(pAll))
+                    } else if (self$use_alpha && !self$scale_obj) {
                       self$update_alpha_regression(max_pAll=max(pAll))
+                    } else {
+                      stop("Shouldn't be here #234299")
                     }
+      # browser()
+      # if (self$scale_obj) {
+        # self$update_alpha_regression_scale_obj(max_pAll = max(pAll), max_pX=max(self$pX))
+      # }
       # print(1 - self$alpha * max(self$p(self$X)))
       #browser()
-      self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
-      self$gamma <- self$kappa * self$gammamax
+      if (self$scale_obj && self$use_alpha) { # For my weird addition
+        alpha_maxp <- max((self$p(self$X) - self$alpha[1]) / (self$alpha[2] - self$alpha[1]))
+        self$gammamax <- log(self$delta) / log(1 - alpha_maxp) # p14
+        self$gamma <- self$kappa * self$gammamax
+      } else {
+        self$gammamax <- log(self$delta) / log(1 - self$alpha * max(self$p(self$X))) # p14
+        self$gamma <- self$kappa * self$gammamax
+      }
       if (self$gammamax==0 || self$gamma==0) {
         warning("gamma and/or gammamax equal zero, so it's not working right. This is very bad and means it isn't doing the energy properly.")
       }
@@ -852,8 +879,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$qX <- self$q_from_p(self$pX)
       self$qXopts <- self$q_from_p(self$pXopts)
       if (any(is.nan(self$qXopts))) {browser()}
-      self$q_from_p(self$pXopts)
-      12
+      # self$q_from_p(self$pXopts)
+      # 12
     },
     update_p_and_q_values = function() {
       stop("I think this is never used! #8293487372")
@@ -931,6 +958,99 @@ bSMED <- R6::R6Class(classname = "bSMED",
         pgnb <- pgnb_lb
       }
       alpha <- 1/pgnb
+      if (self$verbose >=1) {print(paste("new alpha is", alpha))}
+      alpha
+    },
+    update_alpha_regression_scale_obj = function(max_pAll, max_pX, min_Pall) {#browser()
+      # alpha is used to scale phat so max of alpha*p is below one
+      # But if I'm using a scaled relative value, then it doesn't matter
+      # So using this with relative values gives issues in log(1-alpha*maxp)
+      nb <- self$iteration - 1 # First was initial points, haven't done current yet
+
+      # p values for alpha regression are calculated after new data is added
+      # and model is updated
+      # Add value for most recently completed iteration
+      self$alpha_regression_scale_obj_i_values <- c(self$alpha_regression_scale_obj_i_values, self$iteration - 1)
+      self$alpha_regression_scale_obj_p_values <- c(self$alpha_regression_scale_obj_p_values, max_pX) # Using max_pX instead of max_pXall to make sure values increase, even if Kim et al prefer to use all in their method
+      if (self$iteration == 2) {
+        self$alpha_regression_scale_obj_i_values <- c(0, self$alpha_regression_scale_obj_i_values)
+        self$alpha_regression_scale_obj_p_values <- c(mean(self$Z), self$alpha_regression_scale_obj_p_values)
+      }
+      if (self$iteration <= 2) { # Use this until we have three data points to regress
+        # self$alpha_regression_i_values <- c(0, self$alpha_regression_i_values)
+        # self$alpha_regression_p_values <- c(self$alpha_regression_p_values[1]/2, self$alpha_regression_p_values)
+        # Only one data point, so can't regress
+        # Set alpha low to be lowest value
+        # Set alpha high to be largest fit+2*se value to ensure all are in [0,1)
+        pred <- self$mod$predict(rbind(self$X, self$Xopts, self$Xopts_removed), se=TRUE)
+        alpha <- c(min(pred$fit), max(pred$fit + 2*pmax(pred$se, 1e-8)))
+        return(alpha)
+      }
+
+      i_values <- self$alpha_regression_scale_obj_i_values
+      pi_values <- self$alpha_regression_scale_obj_p_values
+      # For current iteration use max_pAll to make sure it is biggest
+      pi_values[length(pi_values)] <- max_pAll
+      # pnb <- pi_values0[nb+1]
+
+      # Trying weird thing to add point for final iteration at highest pred+2*se
+      use_max_pred_2se <- TRUE
+      if (use_max_pred_2se) {
+
+        pred <- self$mod$predict(rbind(self$X, self$Xopts, self$Xopts_removed), se=TRUE)
+        max_pred_2se <- max(pred$fit + 2*pmax(pred$se, 1e-8))
+        i_values <- c(i_values, self$nb)
+        pi_values <- c(pi_values, max_pred_2se)
+      }
+
+      # pnb_bar <- (nb*pnb + 1) / (nb + 1)
+      # i_values <- c(i_values0, self$nb)
+      # pi_values <- c(pi_values0, pnb_bar)
+
+      # pgnb_lb <- (pnb + pnb_bar) / 2
+      # Set lower bound to be a little above max_pAll
+      pgnb_lb <- max_pAll + 1e-8
+      if (use_max_pred_2se) {
+        pgnb_lb <- (max_pAll + max_pred_2se) / 2
+      }
+
+      pgnb <- max_pAll #max(pi_values)
+      beta0 <- 0
+      beta1 <- 0
+
+      pi_hat <- function(i, pgnbhat, beta0hat, beta1hat) {
+        pgnbhat * 1/(1 + exp(-(beta0hat + beta1hat*i)))
+      }
+      optim_fn <- function(par_in) {
+        pgnbhat <- par_in[1]
+        beta0hat <- par_in[2]
+        beta1hat <- par_in[3]
+        mean((pi_values - pi_hat(i_values, pgnbhat, beta0hat, beta1hat))^2)
+      }
+
+      optim_out <- optim(par=c(pgnb_lb, 0, 0), fn=optim_fn,
+                         method="L-BFGS-B", lower=c(pgnb_lb, -Inf, 0)) # Last bound makes sure it is increasing
+      pgnb <- optim_out$par[1]
+      # These will plot the data and show the fitted line
+      # plot(i_values, pi_values)
+      # curve(pgnb * 1/(1 + exp(-optim_out$par[2] - x*optim_out$par[3])), add=T, col=2)
+
+      # If it is below lower bound, set it to be bound
+      # The lb is a weighted average of the current pi (pnb) and pnb_bar,
+      #  which is between pnb and 1, so lb should be higher than pnb.
+      #  But it won't be if pnb is above 1, which can happen if the model is bad?
+      #  Should I force p predictions to be between [0,1]???
+      # if (pnb>1) {
+        # browser(text = "I think is when there will be trouble, model predicts bigger than 1 but it shouldn't be allowed")
+      # }
+      if (pgnb < pgnb_lb) {
+        if (self$verbose >= 1) {
+          print("pgnb is lower than lb, setting to be lb to avoid big problems, this is what should be done, trust me (and Kim et al)")
+        }
+        pgnb <- pgnb_lb
+      }
+      # alpha <- 1/pgnb
+      alpha <- c(min_Pall, pgnb)
       if (self$verbose >=1) {print(paste("new alpha is", alpha))}
       alpha
     },
