@@ -22,8 +22,20 @@ if (F) {
 #' @return Object of \code{\link{R6Class}} with methods for running a bSMED experiment.
 #' @format \code{\link{R6Class}} object.
 #' @examples
-#' a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="func",
-#'      n0=0,b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
+#' set.seed(0)
+#' a <- bSMED$new(D=2,func=TestFunctions::gaussian1, obj="func",
+#'      n0=0,b=3, nb=5,
+#'      X0=lhs::maximinLHS(20,2),
+#'      Xopts=lhs::maximinLHS(500,2))
+#' a$run()
+#' set.seed(1)
+#' a <- bSMED$new(D=2,func=TestFunctions::quad_peaks_slant,
+#'      obj="func", n0=0,b=3, nb=5,
+#'      X0=lhs::maximinLHS(20,2),
+#'      Xopts=lhs::maximinLHS(500,2),
+#'      use_alpha=TRUE, package="laGP",
+#'      parallel=FALSE, func_fast=TRUE,
+#'      use_design_region_fix=TRUE)
 #' a$run()
 #' @field X Design matrix
 #' @field Z Responses
@@ -32,33 +44,83 @@ if (F) {
 #' @field D Dimension of data
 #' @field Xopts Available points
 #' @field X0 Initial design
-#' @field package Which GP package to use in IGP
+#' @field package Which GP package to use in IGP. Default is "laGP" and probably is best choice.
 #' @field stats List of tracked stats
 #' @field iteration Which iteration
 #' @field mod The GP model from IGP
+#' @field func The function to maximize
+#' @field func_run_together Should the new points to evaluate be passed to func as a matrix of all new points in row or each separately as a vector. The matrix form (TRUE) lets you have all points passed at once to your function.
+#' @field func_fast Whether the function is fast to evaluate and thus can be used to estimate MSE and plot it. Probably TRUE for simple tests, but FALSE for real experiments
 #' @field obj Character telling what the objective function is, e.g. max or grad
 #' @field obj_func Function to evaluate the objective
-#' @field obj_alpha A parameter that can be used to have model focus on uncertain areas when model is poor
-#' @field scale_obj If the objective is not in [0,1], then this will scale it so it works with this method. Implementation not working now.
+#' @field obj_alpha A parameter that can be used to have model focus on uncertain areas when model is poor. Not implemented now.
+#' @field scale_obj If the objective is not in [0,1), then this will scale it so it works with this method. Also can choose whether use_alpha. Either way the lowest value is scaled to zero. Both choices for use_alpha do similar things, not sure which is better.
 #' @field n0 How many points were in initial design, not important since X0 must be given in
+#' @field alpha Estimated parameter. Scalar if scale_obj==FALSE as in paper. Vector with lower and upper bounds of p if scale_obj==TRUE, this is my own addition, not in paper.
+#' @field use_alpha Whether alpha should be estimated and used. This should be TRUE if function output is in [0,1) as required in paper. Can be FALSE if usings scale_obj.
+#' @field alpha_regression_i_values Values used to estimate alpha (iteration)
+#' @field alpha_regression_p_values Values used to estimate alpha (max func value)
+#' @field gamma Power used in energy
+#' @field gammamax A maximum value for gamma, a fraction is used based on the iteration
+#' @field tau Threshold for design region adaptation
+#' @field kappa Parameter for design region adaptation
+#' @field delta A small positive number to make sure the algorithm converges. The paper doesn't mention what value to use, 1e-3 seems to work but I have no clue.
+#' @field Xopts_removed Xopts values that were removed by the design region adaptation
+#' @field pX p values for rows of X
+#' @field pXopts p values for rows of Xopts
+#' @field qX q values for rows of q
+#' @field qXopts p values for rows of Xopts
+#' @field p Function used to calculate energy based on the model.
+#' @field use_design_region_fix I think it makes more sense to use the quantile of the average instead of the average of the quantiles. FALSE does what is in paper and is default.
+#' @field exchange_algorithm_restarts How many restarts for exchange algorithm. I didn't see a difference with more restarts.
+#' @field parallel Should the new values be calculated in parallel? Not for the model, for getting actual new Z values. Can cause trouble since I haven't used it much.
+#' @field parallel_cores Number of cores used for parallel
+#' @field parallel_cluster The object for the cluster currently running
+#' @field verbose 0 means print nothing, 1 means print somewhat important things, 2 means print a lot. Not much implemented though.
+
 #' @section Methods:
 #' \describe{
 #'   \item{Documentation}{For full documentation of each method go to https://github.com/CollinErickson/bSMED}
-#'   \item{\code{new(X, Z, corr="Gauss", verbose=0, separable=T, useC=F,useGrad=T,
-#'          parallel=T, nug.est=T, ...)}}{This method is used to create object of this class with \code{X} and \code{Z} as the data.}
+#'   \item{\code{new(D,
+#'                   package="laGP", obj=NULL,
+#'                   func, func_run_together=FALSE, func_fast=TRUE,
+#'                   use_alpha=TRUE, scale_obj=NULL,
+#'                   delta=1e-3,
+#'                   use_design_region_fix = FALSE,
+#'                   exchange_algorithm_restarts=1,
+#'                   X0, Xopts, b, nb,
+#'                   estimate.nugget=FALSE, set.nugget=1e-8,
+#'                   parallel=FALSE, parallel_cores="detect",
+#'                   verbose=0,
+#'                   ...)}}{
+#'                   This method is used to create object of this class.
+#'                   User must give D, func, X0, Xopts, b, and nb.
+#'                   }
 #'
-#'   \item{\code{update(Xnew=NULL, Znew=NULL, Xall=NULL, Zall=NULL,
-#' restarts = 5,
-#' param_update = T, nug.update = self$nug.est)}}{This method updates the model, adding new data if given, then running optimization again.}
-#'   }
+#'   \item{\code{run(maxit=self$nb - self$iteration + 1,
+#'   plotlastonly=F, noplot=F)}}{
+#'   This method run the model. It runs maxit iterations, which defaults to the end of the experiment as determined by nb.
+#'   plotlastonly only shows last plot, noplot shows no plots.}
+#'
+#'   \item{\code{run1(plotit=TRUE)}}{
+#'   This method runs a single iteration.
+#'   It plots the results if plotit==TRUE.}
+#'
+#'   \item{\code{plot1()}}{
+#'   This method plots the the current model.}
+#'
+#'   \item{\code{print_results(give_best_prediction=TRUE)}}{
+#'   This prints the best design point found in the experiment.
+#'   If give_best_prediction==TRUE, it prints where it thinks the maximum of the surface is.}
+#' }
 bSMED <- R6::R6Class(classname = "bSMED",
   public = list(
     func = NULL, # "function", The function to calculate new values after selected
     func_run_together = NULL, # Should the matrix of values to be run be passed to func as a matrix or by row?, useful if you parallelize your own function or call another program to get actual values
     func_fast = NULL,
     D = NULL, # "numeric",
-    L = NULL, # "numeric",
-    g = NULL, # "numeric", # g not used but I'll leave it for now
+    # L = NULL, # "numeric",
+    # g = NULL, # "numeric", # g not used but I'll leave it for now
     X = NULL, # "matrix", Z = "numeric", Xnotrun = "matrix",
     #Xnotrun = NULL,
     Z = NULL,
@@ -75,7 +137,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     n0 = NULL, # "numeric"
     #take_until_maxpvar_below = NULL,
     package = NULL, # "character",
-    batch.tracker = NULL, # "numeric",
+    # batch.tracker = NULL, # "numeric",
     #force_old = NULL, # "numeric",
     #force_pvar = NULL, # "numeric",
     #useSMEDtheta = NULL, # "logical"
@@ -83,7 +145,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
     desirability_func = NULL, # args are mod and XX
 
     # adding for bSMED
-    phat = NULL,
+    # phat = NULL,
     alpha = NULL,
     use_alpha = NULL,
     alpha_regression_i_values = NULL,
@@ -112,22 +174,26 @@ bSMED <- R6::R6Class(classname = "bSMED",
 
     verbose = NULL, # 0 means print nothing, 1 means print somewhat important things, 2 means print a lot
 
-    initialize = function(D,L=NULL,package="laGP", obj=NULL, n0=0,
-                         #force_old=0, force_pvar=0,
-                         #useSMEDtheta=F,
-                         func, func_run_together=FALSE, func_fast=TRUE,
-                         #take_until_maxpvar_below=NULL,
-                         #design="sFFLHD",
-                         p=NULL, alpha=1, use_alpha=T, scale_obj=NULL,
-                         gamma=0, tau=0, kappa=0, use_design_region_fix = FALSE,
-                         exchange_algorithm_restarts=1,
-                         X0, Xopts, b, nb,
-                         estimate.nugget=FALSE, set.nugget=1e-12,
-                         parallel=FALSE, parallel_cores="detect",
-                         verbose=0,
-                         ...) {#browser()
+    initialize = function(D, #L=NULL,
+                          package="laGP", obj=NULL, #n0=0,
+                          #force_old=0, force_pvar=0,
+                          #useSMEDtheta=F,
+                          func, func_run_together=FALSE, func_fast=TRUE,
+                          #take_until_maxpvar_below=NULL,
+                          #design="sFFLHD",
+                          # p=NULL, alpha=1,
+                          use_alpha=TRUE, scale_obj=NULL,
+                          # gamma=0, tau=0, kappa=0,
+                          delta=1e-3,
+                          use_design_region_fix = FALSE,
+                          exchange_algorithm_restarts=1,
+                          X0, Xopts, b, nb,
+                          estimate.nugget=FALSE, set.nugget=1e-8,
+                          parallel=FALSE, parallel_cores="detect",
+                          verbose=0,
+                          ...) {#browser()
       self$D <- D
-      self$L <- L
+      # self$L <- L
       self$func <- func
       self$func_run_together <- func_run_together
       self$func_fast <- func_fast
@@ -160,7 +226,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #self$mod <- UGP$new(package = self$package)
       # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
       self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
-      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
+      # self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
+      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), pamv=c())
       self$iteration <- 1
       self$obj_alpha <- 0.5
 
@@ -172,15 +239,16 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # self$qXopts = NULL,
 
 
-      self$alpha <- alpha
+      self$alpha <- NaN
       self$use_alpha <- use_alpha
       self$alpha_regression_i_values <- c()
       self$alpha_regression_p_values <- c()
-      self$gamma <- gamma
-      self$gammamax <- NA
-      self$tau <- tau
-      self$kappa <- kappa
-      self$delta <- 1e-3 # small positive number, no clue what it should be
+      self$gamma <- NaN
+      self$gammamax <- NaN
+      self$tau <- NaN
+      self$kappa <- NaN
+      if (delta >= 1) {stop("Delta must be smaller than 1, should be small positive number. (in bSMED::bSMED$initialize)")}
+      self$delta <- delta # small positive number, no clue what it should be
       self$nb <- nb
       self$use_design_region_fix <- use_design_region_fix
       self$exchange_algorithm_restarts <- exchange_algorithm_restarts
@@ -482,7 +550,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #self$Xnotrun <- self$Xnotrun[-newL, , drop=FALSE]
       Xnew <- self$Xopts[newL,]
       self$Xopts <- self$Xopts[-newL, , drop=FALSE]
-      self$batch.tracker <- self$batch.tracker[-newL]
+      # self$batch.tracker <- self$batch.tracker[-newL]
       # Znew <- apply(Xnew,1,self$func)
       Znew <- self$calculate_Z(Xnew)
       if (any(duplicated(rbind(self$X,Xnew)))) {browser()}
@@ -519,7 +587,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
       self$stats$mse <- c(self$stats$mse, self$mse_func()) #msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
       self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
-      self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
+      # self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
       self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
     },
     mse_func = function() {
