@@ -609,15 +609,23 @@ bSMED <- R6::R6Class(classname = "bSMED",
         #xlim <- lims[1,]
         #ylim <- lims[2,]
         cf::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
-              afterplotfunc=function(){points(self$X,pch=19)
-                                       points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
+              afterplotfunc=function(){
+                points(self$X,pch=19)
+                if (self$iteration >1) {
+                  points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],
+                         col='yellow',pch=19, cex=.5) # plot last L separately
+                  }
               }
         )
         # Plot s2 predictions
         screen(2)
         cf::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
-               afterplotfunc=function(){points(self$X,pch=19)
-                 points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],col='yellow',pch=19, cex=.5) # plot last L separately
+               afterplotfunc=function(){
+                 points(self$X,pch=19)
+                 if (self$iteration > 1) {
+                   points(self$X[(nrow(self$X)-self$b+1):nrow(self$X),],
+                          col='yellow',pch=19, cex=.5) # plot last L separately
+                 }
                  points(self$Xopts, col=2); # add points not selected
                }
         )
@@ -1233,9 +1241,10 @@ if (F) {
 
 }
 if (F) {
-  quad_peaks <- function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}
-  quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.02,.01))
-  cf::cf(quad_peaks)
-  cf::cf(quad_peaks_slant)
-  a <- bSMED$new(D=2,L=1003,func=quad_peaks_slant, obj="func", n0=0,b=3, nb=5, X0=rbind(c(.5,.5),lhs::maximinLHS(20,2)), Xopts=lhs::maximinLHS(500,2), use_alpha=T, package="laGP", parallel=F, use_design_region_fix=T, func_fast=T);a$run()
+  # quad_peaks <- function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}
+  # quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.02,.01))
+  # cf::cf(quad_peaks)
+  # cf::cf(quad_peaks_slant)
+  a <- bSMED$new(D=2,func=TestFunctions::quad_peaks_slant, obj="func", n0=0,b=3, nb=5, X0=rbind(c(.5,.5),lhs::maximinLHS(20,2)), Xopts=lhs::maximinLHS(500,2), use_alpha=T, package="laGP", parallel=F, use_design_region_fix=T, func_fast=T);a$run()
+  a <- bSMED$new(D=6,func=TestFunctions::OTL_Circuit, obj="func", b=3, nb=5, X0=lhs::maximinLHS(20,6), Xopts=lhs::maximinLHS(500,6), use_alpha=T, scale_obj=T, package="laGP_GauPro", use_design_region_fix=T);a$run()
 }
