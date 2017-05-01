@@ -97,6 +97,7 @@ Class providing object with methods for bSMED
 
 \item{\code{verbose}}{0 means print nothing, 1 means print somewhat important things, 2 means print a lot. Not much implemented though.}
 }}
+
 \section{Methods}{
 
 \describe{
@@ -134,6 +135,7 @@ Class providing object with methods for bSMED
   If give_best_prediction==TRUE, it prints where it thinks the maximum of the surface is.}
 }
 }
+
 \examples{
 set.seed(0)
 a <- bSMED$new(D=2,func=TestFunctions::gaussian1, obj="func",
@@ -159,4 +161,3 @@ a$run()
 \keyword{regression}
 \keyword{sequential,}
 \keyword{simulation,}
-
