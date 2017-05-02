@@ -4,7 +4,7 @@ author: "Collin Erickson"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{Introduction to the bSMED package}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -23,7 +23,7 @@ To demonstrate how this package works we use the bSMED package to find the maxim
 
 
 ```{r}
-set.seed(1)
+set.seed(0) # 0 for text in here, 3 to get missed peak
 ```
 
 ```{r}
@@ -43,7 +43,11 @@ We create a bSMED R6 object using bSMED$new and passing in the parameters we wan
 - Xopts: The points that are available to be selected
 
 ```{r}
-a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant, obj="func", b=3, nb=5, X0=lhs::maximinLHS(20,2), Xopts=lhs::maximinLHS(500,2))
+a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant,
+                      obj="func", b=3, nb=5,
+                      X0=lhs::maximinLHS(20,2),
+                      Xopts=lhs::maximinLHS(500,2)
+                      )
 
 ```
 
@@ -51,7 +55,7 @@ a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant, obj="func", b=3, nb=5, X0=lhs::
 
 To run the experiment, we can simply call `a$run()`. Below we run only the first iteration and plot the results. The first iteration simply runs the `X0` points passed in, so there is no decision making. It only evaluates the function at the given points and fits a model to it. The top left plot shows the predicted surface, the top right plot shows the predictive variance of the model. The red circles on the top right plot show the points that are available to be selected but haven't been selected yet. The bottom left plot shows the actual surface, the bottom right plot shows the squared error.
 
-```{r run_a, fig.width=7.5, fig.height=7.5}
+```{r run_a, fig.width=13, fig.height=9}
 a$run(1, noplot=F)
 ```
 
@@ -61,7 +65,7 @@ In the next iteration the points are selected using the bSMED criterion. The new
 Two points were added at the lower left peak, one at the top right peak.
 You can see that there are fewer red circles in the top right plot. Those are points that were removed from consideration by the design-region adaptation criterion.
 
-```{r run a second iter, fig.width=7.5, fig.height=7.5}
+```{r run a second iter, fig.width=13, fig.height=9}
 a$run(1)
 ```
 
@@ -69,7 +73,7 @@ a$run(1)
 
 In the third iteration three points are added near the top right peak.
 
-```{r run a third iter, fig.width=7.5, fig.height=7.5}
+```{r run a third iter, fig.width=13, fig.height=9}
 a$run(1)
 ```
 
@@ -78,7 +82,7 @@ a$run(1)
 
 In the fourth iteration one more is added to the top right peak, and two to the top left peak.
 
-```{r run a fourth iter, fig.width=7.5, fig.height=7.5}
+```{r run a fourth iter, fig.width=13, fig.height=9}
 a$run(1)
 ```
 
@@ -89,58 +93,7 @@ In the fifth, and final, iteration one more is added to the top left peak, and t
 We can see that the bottom two peaks have been largely ignored despite being only marginally lower than the top right peak.
 Below the plot it prints out the best design point it has found, which is an actual function value, and its prediction of where the maximum of the function is. We can see that these are fairly close, which generally should be true if enough candidate points have been given to the model.
 
-```{r run a fifth iter, fig.width=7.5, fig.height=7.5}
+```{r run a fifth iter, fig.width=13, fig.height=9}
 a$run(1)
 ```
 
-
-
-# Delete this
-
-Vignettes are long form documentation commonly included in packages. Because they are part of the distribution of the package, they need to be as compact as possible. The `html_vignette` output type provides a custom style sheet (and tweaks some options) to ensure that the resulting html is as small as possible. The `html_vignette` format:
-
-- Never uses retina figures
-- Has a smaller default figure size
-- Uses a custom CSS stylesheet instead of the default Twitter Bootstrap style
-
-## Vignette Info
-
-Note the various macros within the `vignette` section of the metadata block above. These are required in order to instruct R how to build the vignette. Note that you should change the `title` field and the `\VignetteIndexEntry` to match the title of your vignette.
-
-## Styles
-
-The `html_vignette` template includes a basic CSS theme. To override this theme you can specify your own CSS in the document metadata as follows:
-
-    output: 
-      rmarkdown::html_vignette:
-        css: mystyles.css
-
-## Figures
-
-The figure sizes have been customised so that you can easily put two images side-by-side. 
-
-```{r, fig.show='hold'}
-plot(1:10)
-plot(10:1)
-```
-
-You can enable figure captions by `fig_caption: yes` in YAML:
-
-    output:
-      rmarkdown::html_vignette:
-        fig_caption: yes
-
-Then you can use the chunk option `fig.cap = "Your figure caption."` in **knitr**.
-
-## More Examples
-
-You can write math expressions, e.g. $Y = X\beta + \epsilon$, footnotes^[A footnote here.], and tables, e.g. using `knitr::kable()`.
-
-```{r, echo=FALSE, results='asis'}
-knitr::kable(head(mtcars, 10))
-```
-
-Also a quote using `>`:
-
-> "He who gives up [code] safety for [code] speed deserves neither."
-([via](https://twitter.com/hadleywickham/status/504368538874703872))
