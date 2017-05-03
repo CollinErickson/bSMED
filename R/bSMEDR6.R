@@ -227,7 +227,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
       self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
       # self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
-      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), pamv=c())
+      self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(),
+                         pointsused=c(), pointsavailable=c(),
+                         pointsremoved=c(), pamv=c())
       self$iteration <- 1
       self$obj_alpha <- 0.5
 
@@ -587,6 +589,10 @@ bSMED <- R6::R6Class(classname = "bSMED",
       self$stats$pvar <- c(self$stats$pvar, msfunc(self$mod$predict.var,cbind(rep(0,self$D),rep(1,self$D))))
       self$stats$mse <- c(self$stats$mse, self$mse_func()) #msecalc(self$func,self$mod$predict,cbind(rep(0,self$D),rep(1,self$D))))
       self$stats$ppu <- c(self$stats$ppu, nrow(self$X) / (nrow(self$X) + nrow(self$Xopts)))
+      self$stats$pointsused <- c(self$stats$pointsused, nrow(self$X))
+      self$stats$pointsavailable <- c(self$stats$pointsavailable, nrow(self$Xopts))
+      self$stats$pointsremoved <- c(self$stats$pointsremoved, nrow(self$Xopts_removed))
+
       # self$stats$minbatch <- c(self$stats$minbatch, if (length(self$batch.tracker>0)) min(self$batch.tracker) else 0)
       self$stats$pamv <- c(self$stats$pamv, self$mod$prop.at.max.var())
     },
@@ -632,7 +638,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
         if (self$func_fast) {
           screen(3) # actual squared error plot
           par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-          cf::cf_func(self$func, n = 20, mainminmax_minmax = F, pretitle="Actual ")
+          cf::cf_func(self$func, n = 20, mainminmax_minmax = F,
+                      pretitle="Actual ", cex.main=.6)
         }
         if (self$iteration >= 2) {
          statsdf <- as.data.frame(self$stats)
@@ -651,7 +658,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
          #plot(statsdf$iter, statsdf$minbatch, type='o', pch=19,
          #     xlab="Iteration")#, ylab="Level")
          #legend('bottomright',legend="Batch not run",fill=1)
-         cf::cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F, pretitle="Grad ")
+         cf::cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F,
+                     pretitle="Grad ", cex.main=.6)
 
          screen(6) # % of pts used plot
          par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
@@ -663,7 +671,8 @@ bSMED <- R6::R6Class(classname = "bSMED",
           screen(7) # actual squared error plot
           par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
           cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
-                            n = 20, mainminmax_minmax = F, pretitle="SqErr ")
+                            n = 20, mainminmax_minmax = F, pretitle="SqErr ",
+                            cex.main=.6)
         }
 
         close.screen(all = TRUE)
@@ -700,20 +709,40 @@ bSMED <- R6::R6Class(classname = "bSMED",
           Zused.pred <- self$mod$predict(self$X)
           plot(NULL, xlim=c(min(self$Z, Zplot.act), max(self$Z, Zplot.act)),
               ylim=c(min(Zused.pred, Zplot.pred), max(Zused.pred, Zplot.pred)))
+          # browser()
+          legend('topleft', legend=c(expression(hat(y)~vs~y)))
           abline(a = 0, b = 1)
           if (self$func_fast) {points(Zplot.act, Zplot.pred, xlab="Z", ylab="Predicted")}
           points(self$Z, Zused.pred, col=2)
           # 3 % pts used plot
-          plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
-              xlab="Iteration")#, ylab="Level")
-          legend('bottomleft',legend="% pts",fill=1)
+          # plot(statsdf$iter, statsdf$ppu, type='o', pch=19,
+          #     xlab="Iteration")#, ylab="Level")
+          plot(statsdf$iter, statsdf$pointsused, type='o', pch=19, ylim=range(self$stats[c('pointsused', 'pointsavailable', 'pointsremoved')]),
+               xlab="Iteration")
+          points(statsdf$iter, statsdf$pointsavailable, type='o', pch=19, col=2)
+          points(statsdf$iter, statsdf$pointsremoved, type='o', pch=19, col=3)
+          # legend('bottomleft',legend="% pts",fill=1)
+          legend('left',legend=c("used","avail","rem"),fill=1:3)
           # 4 grad vs pvar
-          Xplot <- matrix(runif(self$D*100), ncol=self$D)
-          Xplot_grad <- pmax(1e-8, self$mod$grad_norm(Xplot))#;browser()
+          Xplot <- matrix(runif(self$D*400), ncol=self$D)
+          # Xplot_grad <- pmax(1e-8, self$mod$grad_norm(Xplot))#;browser()
           Xplot_se <- pmax(1e-8, self$mod$predict.se(Xplot))
-          #if (any(Xplot_se <= 0)) {browser()}
-          #if (any(Xplot_grad < 0)) {browser()}
-          plot(Xplot_se, Xplot_grad, pch=19, xlab='SE', ylab='Grad', log='xy')
+          # plot(Xplot_se, Xplot_grad, pch=19, xlab='SE', ylab='Grad', log='xy')
+          # browser()
+          Xplot_mean <- self$mod$predict(Xplot)
+          if (self$func_fast) {
+            Xplot_actual <- apply(Xplot, 1, self$func)
+            plotrix::twoord.plot(lx=Xplot_se, ly=abs(Xplot_mean-Xplot_actual),
+                                 rx=Xplot_se, ry=Xplot_mean, type="p",
+                                 #xlab=expression(hat(sigma)), #rylab = "yhat", ylab="error",
+                                 mar = c(2,2,0,2),cex=.3, lpch = 19, rpch=19,
+                                 do.first = "legend(x = 'topright', legend = c('err v se', 'yhat v se'), fill=1:2);abline(a=0,b=1)")
+          } else {
+            plot(Xplot_se, Xplot_mean, pch=19, xlab='SE', ylab='yhat', log='x', col=0)
+            legend('topright',legend = expression(hat(y)~vs~se))
+            points(Xplot_se, Xplot_mean, pch=19, col=1)
+          }
+          # Xplot_des <- self$des_func(Xplot)
         }
       }
     },
