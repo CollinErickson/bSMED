@@ -20,6 +20,8 @@ devtools::install_github("CollinErickson/bSMED")
 Example
 -------
 
+See the vignette for a more in-depth description of the following example.
+
 This is a basic example which shows you how to solve a common problem:
 
 ``` r
@@ -32,7 +34,8 @@ quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFu
 a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant,
                       obj="func", b=3, nb=5,
                       X0=lhs::maximinLHS(20,2),
-                      Xopts=lhs::maximinLHS(500,2)
+                      Xopts=lhs::maximinLHS(500,2),
+                      package="GauPro"
                       )
 a$run()
 ```
@@ -40,10 +43,10 @@ a$run()
 ![](tools/README-example-1.png)![](tools/README-example-2.png)![](tools/README-example-3.png)![](tools/README-example-4.png)![](tools/README-example-5.png)
 
     #> Best design point is
-    #>       0.293 0.272 
+    #>       0.262 0.725 
     #>  with objective value
-    #>       0.6149117 
+    #>       0.628346 
     #> Best predicted point over domain is 
-    #>       0 0 
+    #>       0.257 0.744 
     #>  with objective value
-    #>       0.3978941
+    #>       0.6317774

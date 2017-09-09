@@ -46,7 +46,8 @@ We create a bSMED R6 object using bSMED$new and passing in the parameters we wan
 a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant,
                       obj="func", b=3, nb=5,
                       X0=lhs::maximinLHS(20,2),
-                      Xopts=lhs::maximinLHS(500,2)
+                      Xopts=lhs::maximinLHS(500,2),
+                      package="GauPro"
                       )
 
 ```
