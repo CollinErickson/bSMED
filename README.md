@@ -3,6 +3,8 @@
 bSMED
 =====
 
+[![Travis-CI Build Status](https://travis-ci.org/CollinErickson/bSMED.svg?branch=master)](https://travis-ci.org/CollinErickson/bSMED)
+
 This package implements the adaptive sampling algorithm from the paper "Batch Sequential Minimum Energy Design with Design-Region Adaptation" by Heeyoung Kim et al. (2017), published in Journal of Quality Technology Vol. 49, No. 1, January 2017.
 
 I have used the abbreviation `bSMED` to refer to this method. The main function provided by this package is the `bSMED` function, which creates an R6 object that performs the algorithm.

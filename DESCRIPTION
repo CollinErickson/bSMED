@@ -13,7 +13,10 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.0.1
 Depends: R6
-Suggests: TestFunctions, UGP, lhs, laGP, ContourFunctions, numDeriv, parallel,
+Suggests: TestFunctions, ContourFunctions,
+    UGP, laGP, GauPro,
+    lhs,
+    numDeriv, parallel,
     knitr,
     rmarkdown
 VignetteBuilder: knitr

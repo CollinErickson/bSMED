@@ -1,5 +1,5 @@
 ## Test environments
-* local Windows 7 install (platform x86_64-w64-mingw32), R 3.3.1
+* local Windows 7 install (platform x86_64-w64-mingw32), R 3.4.1
 * ubuntu 12.04 (on travis-ci), R 3.3.1
 * win-builder (devel and release)
 
