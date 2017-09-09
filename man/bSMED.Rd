@@ -141,7 +141,8 @@ set.seed(0)
 a <- bSMED$new(D=2,func=TestFunctions::gaussian1, obj="func",
      n0=0,b=3, nb=5,
      X0=lhs::maximinLHS(20,2),
-     Xopts=lhs::maximinLHS(500,2))
+     Xopts=lhs::maximinLHS(500,2),
+     parallel=FALSE)
 a$run()
 set.seed(1)
 a <- bSMED$new(D=2,func=TestFunctions::quad_peaks_slant,
