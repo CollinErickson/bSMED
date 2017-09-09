@@ -1,28 +1,44 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
-bSMED
-=====
 
-This package implements the adaptive sampling algorithm from the paper "Batch Sequential Minimum Energy Design with Design-Region Adaptation" by Heeyoung Kim et al. (2017), published in Journal of Quality Technology Vol. 49, No. 1, January 2017.
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  # fig.path = "README-"
+  fig.path = "tools/README-"
+)
+set.seed(0)
+```
+
+# bSMED
+
+This package implements the adaptive sampling algorithm from the
+paper "Batch Sequential Minimum Energy Design with Design-Region Adaptation" by
+Heeyoung Kim et al. (2017), published in Journal of Quality Technology Vol. 49,
+No. 1, January 2017.
 
 I have used the abbreviation `bSMED` to refer to this method. The main function provided by this package is the `bSMED` function, which creates an R6 object that performs the algorithm.
 
-Installation
-------------
+## Installation
 
 You can install bSMED from github with:
 
-``` r
+```{r gh-installation, eval = FALSE}
 # install.packages("devtools")
 devtools::install_github("CollinErickson/bSMED")
 ```
 
-Example
--------
+## Example
+
+See the vignette for a more in-depth description of the following example.
 
 This is a basic example which shows you how to solve a common problem:
 
-``` r
+```{r example}
 ## basic example code
 
 # Get function
@@ -36,14 +52,3 @@ a <- bSMED::bSMED$new(D=2,func=quad_peaks_slant,
                       )
 a$run()
 ```
-
-![](tools/README-example-1.png)![](tools/README-example-2.png)![](tools/README-example-3.png)![](tools/README-example-4.png)![](tools/README-example-5.png)
-
-    #> Best design point is
-    #>       0.293 0.272 
-    #>  with objective value
-    #>       0.6149117 
-    #> Best predicted point over domain is 
-    #>       0 0 
-    #>  with objective value
-    #>       0.3978941
