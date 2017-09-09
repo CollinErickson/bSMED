@@ -4,7 +4,7 @@ if (F) {
   #source('LHS.R')
   #source("random_design.R")
   library(TestFunctions, lib.loc = lib.loc)
-  library(cf, lib.loc = lib.loc)
+  library(ContourFunctions, lib.loc = lib.loc)
   #library(SMED, lib.loc = lib.loc)
   #library(sFFLHD, lib.loc = lib.loc)
   library(UGP, lib.loc = lib.loc)
@@ -538,7 +538,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
       #} else { # SMED NEW STUFF !!!!
         #browser()
       #  bestL <- SMED_selectC(f=obj_func, n=L, X0=X, Xopt=Xnotrun)
-        # cf::cf_func(mod$grad_norm)
+        # ContourFunctions::cf_func(mod$grad_norm)
         # points(X, col=2, pch=19)
         # text(Xnotrun[,1],Xnotrun[,2])
         # SMED_select(f=obj_func,p=ncol(X),n=8, X0=X, Xopt=Xnotrun)
@@ -614,7 +614,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         screen(1)
         #xlim <- lims[1,]
         #ylim <- lims[2,]
-        cf::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+        ContourFunctions::cf_func(self$mod$predict,batchmax=500, pretitle="Predicted Surface ", #pts=X)
               afterplotfunc=function(){
                 points(self$X,pch=19)
                 if (self$iteration >1) {
@@ -625,7 +625,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         )
         # Plot s2 predictions
         screen(2)
-        cf::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
+        ContourFunctions::cf_func(self$mod$predict.var,batchmax=500, pretitle="Predicted Surface ", #pts=X)
                afterplotfunc=function(){
                  points(self$X,pch=19)
                  if (self$iteration > 1) {
@@ -638,7 +638,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         if (self$func_fast) {
           screen(3) # actual squared error plot
           par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-          cf::cf_func(self$func, n = 20, mainminmax_minmax = F,
+          ContourFunctions::cf_func(self$func, n = 20, mainminmax_minmax = F,
                       pretitle="Actual ", cex.main=.6)
         }
         if (self$iteration >= 2) {
@@ -658,7 +658,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
          #plot(statsdf$iter, statsdf$minbatch, type='o', pch=19,
          #     xlab="Iteration")#, ylab="Level")
          #legend('bottomright',legend="Batch not run",fill=1)
-         cf::cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F,
+         ContourFunctions::cf_func(self$mod$grad_norm, n=20, mainminmax_minmax = F,
                      pretitle="Grad ", cex.main=.6)
 
          screen(6) # % of pts used plot
@@ -670,7 +670,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
         if (self$func_fast) {
           screen(7) # actual squared error plot
           par(mar=c(2,2,0,0.5)) # 5.1 4.1 4.1 2.1 BLTR
-          cf::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
+          ContourFunctions::cf_func(function(xx){(self$mod$predict(xx) - self$func(xx))^2},
                             n = 20, mainminmax_minmax = F, pretitle="SqErr ",
                             cex.main=.6)
         }
@@ -1196,7 +1196,7 @@ if (F) {
   source("adaptconcept_helpers.R")
   require(mlegp)
   require(GPfit)
-  require(cf)
+  require(ContourFunctions)
   require(TestFunctions)
   source('LHS.R')
   library(SMED)
@@ -1222,7 +1222,7 @@ if (F) {
   a$run(20, plotl=T)
 
   # grad cont
-  cf::cf_func(a$mod$grad_norm)
+  ContourFunctions::cf_func(a$mod$grad_norm)
 
   # test run times
   a <- adapt.concept2.sFFLHD.R6(D=2,L=3,func=gaussian1, obj="grad", n0=0)
@@ -1261,7 +1261,7 @@ if (F) {
   }
   a <- adapt.concept2.sFFLHD.R6$new(D=2,L=5,func=banana, obj="desirability", desirability_func=des_funcse, n0=12, take_until_maxpvar_below=.9, package="laGP", design='sFFLHD')
   a$run(5)
-  cf::cf(function(x) des_funcse(a$mod, x), batchmax=1e3, pts=a$X)
+  ContourFunctions::cf(function(x) des_funcse(a$mod, x), batchmax=1e3, pts=a$X)
 }
 if (F) {
   a <- bSMED$new(D=2,L=1003,func=TestFunctions::gaussian1, obj="grad", n0=0,
@@ -1272,8 +1272,8 @@ if (F) {
 if (F) {
   # quad_peaks <- function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}
   # quad_peaks_slant <- TestFunctions::add_linear_terms(function(XX) {.2+.015*TestFunctions::add_zoom(TestFunctions::rastrigin, scale_low = c(.4,.4), scale_high = c(.6,.6))(XX)^.9}, coeffs = c(.02,.01))
-  # cf::cf(quad_peaks)
-  # cf::cf(quad_peaks_slant)
+  # ContourFunctions::cf(quad_peaks)
+  # ContourFunctions::cf(quad_peaks_slant)
   a <- bSMED$new(D=2,func=TestFunctions::quad_peaks_slant, obj="func", n0=0,b=3, nb=5, X0=rbind(c(.5,.5),lhs::maximinLHS(20,2)), Xopts=lhs::maximinLHS(500,2), use_alpha=T, package="laGP", parallel=F, use_design_region_fix=T, func_fast=T);a$run()
   a <- bSMED$new(D=6,func=TestFunctions::OTL_Circuit, obj="func", b=3, nb=5, X0=lhs::maximinLHS(20,6), Xopts=lhs::maximinLHS(500,6), use_alpha=T, scale_obj=T, package="laGP_GauPro", use_design_region_fix=T);a$run()
 }
