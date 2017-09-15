@@ -14,9 +14,11 @@ LazyData: true
 RoxygenNote: 6.0.1
 Depends: R6
 Suggests: TestFunctions, ContourFunctions,
-    UGP, laGP, GauPro,
+    IGP, laGP, GauPro,
     lhs,
     numDeriv, parallel,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+URL: https://github.com/CollinErickson/bSMED
+BugReports: https://github.com/CollinErickson/bSMED/issues

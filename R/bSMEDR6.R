@@ -7,9 +7,9 @@ if (F) {
   library(ContourFunctions, lib.loc = lib.loc)
   #library(SMED, lib.loc = lib.loc)
   #library(sFFLHD, lib.loc = lib.loc)
-  library(UGP, lib.loc = lib.loc)
+  library(IGP, lib.loc = lib.loc)
   library(magrittr)
-  #setOldClass("UGP")
+  #setOldClass("IGP")
 }
 
 #' Class providing object with methods for bSMED
@@ -224,9 +224,9 @@ bSMED <- R6::R6Class(classname = "bSMED",
       # if(is.null(package)) {self$package <- "laGP"}
       # else {self$package <- package}
       self$package <- package
-      #self$mod <- UGP$new(package = self$package)
+      #self$mod <- IGP$new(package = self$package)
       # Assuming noiseless so I'm setting nugget by default, can be changed by passing in
-      self$mod <- UGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
+      self$mod <- IGP::IGP(package = self$package, estimate.nugget=estimate.nugget, set.nugget=set.nugget)
       # self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(), minbatch=c(), pamv=c())
       self$stats <- list(iteration=c(),n=c(),pvar=c(),mse=c(), ppu=c(),
                          pointsused=c(), pointsavailable=c(),
@@ -1193,7 +1193,7 @@ bSMED <- R6::R6Class(classname = "bSMED",
 
 if (F) {
   library(sFFLHD)
-  library(UGP)
+  library(IGP)
   source("adaptconcept_helpers.R")
   require(mlegp)
   require(GPfit)
